@@ -1,0 +1,23 @@
+[project]
+name = "cot-compress"
+version = "0.1.0"
+description = "CoT compression vs. vocabulary-masked (non-linguistic) reasoning under GRPO"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "torch", "unsloth", "unsloth_zoo", "trl", "transformers>=5", "peft", "accelerate",
+  "bitsandbytes>=0.45.3", "datasets", "tensorboard", "pyyaml", "matplotlib", "pandas", "pytest",
+]
+
+# 实际安装用 setup/install.sh（分步装，便于保证 torch 来自 cu128 index）。
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

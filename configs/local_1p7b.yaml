@@ -1,0 +1,56 @@
+# 本地主配置：Qwen3-1.7B 4-bit QLoRA，RTX 5060 8GB。臂 A/B/C 只改 mask.* 字段（train.py --arm 自动设置）。
+model:
+  name: unsloth/Qwen3-1.7B
+  load_in_4bit: true
+  fast_inference: false      # 本地不装 vllm
+  max_seq_length: 4096
+  dtype: null
+ref_model:
+  name: Qwen/Qwen3-0.6B-Base # 困惑度参考，与 Qwen3-1.7B 共用 tokenizer
+
+task:
+  key: ord_n8_h4_d5             # v7 主任务（本地只做 smoke / 单测；正式实验在云端 cloud_4b.yaml）
+  eval_n: 50                 # 训练中 eval 题数
+  eval_every: 25
+  eval_force_at: 1024        # eval 附加指标：(a′)@1024 强制准确率
+  seed: 0
+  m_file: results/M.json     # M = 原生轨迹 L 的中位数（触顶按 max_completion_length 计），scripts/02_compute_M.py 生成
+  m_n: 32
+
+generation:
+  hook: generate             # generate | rollout（rollout requires trl>=0.25，仅云端 vllm）
+  batch_size: 6              # 评估时的生成 batch；KV ≈ 0.11 MB/token/seq。实测 batch 8 × 3072 在 ~2048 处溢出 WSL 共享内存（21→1.8 steps/s）
+  max_new_tokens_think: 3072 # 原生轨迹预算 = train.max_completion_length；到顶强制收尾
+  baseline_mode: think       # 臂 0 = 原生思考、自然结束；到顶强制收尾 "</think>\n\n<answer>"
+  guided_prefill: null       # （弃用）guided 在两任务上都不可用，见 README §10
+  eval_batch_size: 4         # 训练中 eval 的生成 batch（训练模型常驻，显存留余量）
+  max_new_tokens_direct: 16  # 直接作答模式：<answer> 已预填，只需生成答案 + </answer>
+  do_sample: true            # Qwen3 thinking 推荐采样参数；greedy 易重复
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+
+reward:
+  lambda: 0.5                # v4：r = 10·[c·(1−min(λL/M,0.9)) − 0.5·v·(1−c) − 0.05·v·c]；见 cot_compress/rewards.py
+
+mask:                        # v4：按臂自动选（train.py ARM_MASK）：A/D/Crand=none，B/Bseq=letterfree，A2=letterfree_plus_single
+  lift_at: "</think>"        # 屏蔽在 </think> 处解除；白名单不含 <answer> 片段与除 </think> 外的 special token
+
+train:
+  num_generations: 4
+  max_completion_length: 3072 # OOM 时依次降 2560、2048（记录触顶率）；再不行 num_generations 降到 3，不降到 2
+  force_reserve: 40          # 距顶 reserve 个 token 时预填 "</think>\n\n<answer>" 强制收尾；完整终态答案区 30 token，24 会截断（2026-09-18 由 24 改 40）
+  save_every: 25
+  samples_per_eval: 10
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_steps: 200
+  eval_every: 25
+  learning_rate: 5.0e-6
+  lora_r: 16
+  lora_alpha: 32
+  loss_type: dr_grpo
+  scale_rewards: false
+  beta: 0.0
+  gradient_checkpointing: unsloth
+  seed: 0

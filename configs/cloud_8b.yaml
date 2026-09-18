@@ -1,0 +1,11 @@
+# 云端规模点：Qwen3-8B bf16 LoRA（kk 的臂 A/B 各一个）。同 cloud_4b 结构。
+_base: cloud_4b.yaml
+model:
+  name: Qwen/Qwen3-8B
+task:
+  key: ord_n8_h4_d5             # 8B 上先重新准入
+train:
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 32    # 1 × 32 = 32 条 / 步 = 2 个 prompt × G=16
+  vllm_gpu_memory_utilization: 0.40  # 8B bf16 权重 16 GB
+  learning_rate: 5.0e-6

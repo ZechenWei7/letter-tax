@@ -1,0 +1,5 @@
+# 规模点：Qwen3-8B 上 kk 的臂 A/B 各一个（8B 需先重新准入）。
+defaults: {config: configs/cloud_8b.yaml, steps: 400}
+runs:
+  - {key: ord_n8_h4_d5, arm: A, lam: 0.5, seed: 1, priority: 99}
+  - {key: ord_n8_h4_d5, arm: B, lam: 0.5, seed: 1, priority: 99}

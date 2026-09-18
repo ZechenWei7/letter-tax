@@ -1,0 +1,27 @@
+# v7 实现：改动 → 测试对照（2026-09-18；全部 CPU，未训练）
+
+| # | 模块 | 改动（文件） | 测试（tests/） |
+|---|---|---|---|
+| 1 | 任务 | `tasks/kk.py` 新：9 种形式均匀、每人被引用 ≤3、**均匀构造式采样 + 拒绝，只保留天然 S=1**（单元传播 + failed-literal probing 解不掉；N=10 约 0.2–0.4%，2.5 s/题/核；N=12 约 6 s/题/核）、暴力唯一解、`case_split_depth`（广义单元传播 + failed-literal probing + 截断最小决策树搜索）、oracle 下限（最小树文字数 × c）、gold_tree / decoder_labels[k]（k∈{0,1}）、`canonical_form`（sha1 颜色细化 + 平局枚举）、三划分（独立 seed 流、规范形去重、零重叠断言）、IR 题面 + 英文 gloss、答案严格正则 / exact match / Hamming、chance 2^-N；`tasks/__init__.py` 注册 kk（make_eval_set(split=stop/report)、iter_train 循环 train 划分）；`scripts/kk_build_splits.py`（多进程）；`data/kk/kk_n{10,12}_s1_seed0.json` + `.report.json`（规范形数、S、形式分布、oracle 文字数与根传播文字数直方图）。两簇拼接 / 跨组改写已删；S=2 只留在单测的手工实例里 | `test_kk.py`：手工 S=0/1/2 实例（附推理）与独立暴力最小深度实现核对；生成实例唯一解 / S=1 / 探测解不掉 / 引用上限 / 形式-元数；规范形置换不变（含对称形式换序）；答案规则；划分零重叠 + 确定性；注册表。`test_v7_invariants.py::test_generator_data_files_unique_and_S_verified`：两格 6000 题规范形全体唯一、向量化 2^N 唯一解、150 题 S 暴力核对；`KK_FULL=1` 的 10k 实例版 |
+| 2 | 模板检测器 | `cot_compress/templates.py`：dpll_cdcl / bitmask_enum / english_assume / ir_copy_assign，`hit_rate` | `test_warm_strategy_templates.py::test_template_detectors`（各类型正例 / 反例、命中率） |
+| 3 | 策略类检测器 | `cot_compress/strategy.py`：case_splits / propagation / contradiction / consistent（词 ∪ warm 符号）、枚举、dump-and-verify、复制率（≥4 token）、策略类 | `test_warm_strategy_templates.py`（合成类 = 检测类；copy_rate；binary_strings） |
+| 4 | B_warm | `cot_compress/warm.py`（WARM_MAP，`docs/warm_map.md`：全部符号带 / 不带前导空格均为单个白名单 token，分词器核对）、`make_sft_rows`；`scripts/11_sft_warm.py`（fresh LoRA，同配置，SFT；`--dry-run` 只出数据集 + 分布对照）；`train.py --arm Bwarm --eval-only`（无 RL 直接评估，同时把 adapter 存为 final 供 06_diagnose） | `test_warm_preserves_strategy_class_distribution_on_100_trajs`（100 条合成 A 轨迹，类分布与逐条计数全等）、`test_warm_text_rules`、`test_sft_rows`、符号无字母 / 角色不交 |
+| 5 | 解码器 | `cot_compress/decoder.py`（numpy L2 多项 LR，哈希 n≤3 词袋，复制片段掩掉，按题 id 哈希划分，majority 基线，配对 bootstrap，移植基线）；`scripts/08_decoder.py`（k∈{0..S}；A 仪器检查 k=1 acc_assigned ≥ 0.90；B vs 移植 / C_rand） | `test_decoder.py`：划分无重叠且按题分组；合成任务 held-out ≥ 0.9、移植基线 < 0.75、bootstrap 区间 > 0；复制片段掩码 |
+| 6 | 准入 | `cot_compress/admission.py` 八条（用户定稿：direct / native 窗口 / 最小预算 ≥0.5M 只在 acc > chance+10pp 的点比较 / 填充 ≥0.5M 任一点 / 移植掉一半 / 冻结 letter-ban / 模板 <5% / M ≥ 5× oracle(c=2.5)，c=2/3 只报）+ 生成器 S 检查 + gloss 信息 + `post_training_check` + `CELL_ORDER` = (kk_n10_s1, kk_n12_s1)；`01_calibrate.py --admission`：用 stop 划分、加英文 gloss 原生准确率、模板命中率、oracle 下限中位、S 分布 | `test_admission.py`（全过、逐条失败、第 3 条忽略 ≤chance+10pp 的点、第 4 条 <0.5M 不比较且 ≥0.5M 按字面比较、缺项 pending、训练后检查、格顺序） |
+| 7 | 臂与配置 | `train.py`：ARM_MASK A/A2/B/Bwarm/Crand（B_seq 删）、`cot_compress/lora.py`（+embed_tokens **只此一个**：lm_head 不挂（tied），不做 untied 副本；按 `results/lora_embed_sync_check.json` 的 q+embed 门控，失败全臂去掉并记 cloud_log）、warmup 10、stop Δacc<4pp、stopping-eval split、hit_exact / hit_hamming2 / letter_frac 入 eval.jsonl、`--eval-only`、`--dry-run`；`rewards.py`：v 只在答案区（文档）+ kk 轨迹的 strategy / template 注记入归档；`configs/cloud_4b.yaml`（kk_n10_s2、eval_n 500、warmup、lora_embed_lm_head、cost）、`local_1p7b.yaml`、`matrix_core.yaml`（A s1 → B×5 → A×4 → A″×3 → Bwarm_sft → Bwarm(条件) → C_rand×2）、`matrix_scale_8b.yaml`、`cloud_8b.yaml`；`run_matrix.py`：门加 2× oracle（c=2.5，c=2/3 只报）、失败 λ=0.3→1.0→G=32 自动重调并继承、Bwarm_sft 项、冷启动条件项 | `test_analyze_matrix.py::test_run_matrix_prune_gate_retune`（裁剪、门三条件、RETUNE 顺序、run 名）；`test_v7_invariants.py`（mask 10k 采样零命中、白名单 softmax 和为 1、采样 / 训练 logprob 1e-3、禁用行零梯度、embed/lm_head 同步名字映射 + delta 合并 / 还原、C_rand 玩具）；既有 `test_rewards.py` 奖励穷举排序 |
+| 8 | 端点 | `cot_compress/endpoints.py`（PAVA、插值、匹配准确率与 5pp 可计算性、精确单边 Mann-Whitney、Spearman、zstd-19 共享字典 bits（半训半测）、税分档、替换密码检查）；`scripts/analyze.py` 重写（E1 三单位税 + 附加四项、E2、冷启动、E3 五项 + verdict、逐臂 direct 检查）；`06_diagnose.py`：预算曲线 10 点（acc / 外化 / 正确轨迹 token）、kk 描述量（策略类、模板、字母占比、命中率）、stop/report 划分分离；`lengths.letter_fraction` | `test_endpoints.py`（7 项）；`test_analyze_matrix.py`（合成 run 目录：E1 可计算 + 税 + MW p、单位换算、附加项、E2、E3 全过；不可计算与 direct 冒升标记） |
+| 9 | 测试清单 | 见各行；`tests/test_v7_invariants.py` 汇总 §9 的 CPU 项 | 79 项通过（`python -m pytest tests -q`，约 2.5 min）；GPU 项：`scripts/10_check_lora_embed_sync.py`、`09_check_vllm_processor.py` |
+| 10 | 归档与复现 | README §10 v7 协议摘要 + 预注册 commit hash 占位；`scripts/13_instrument_control.py`（手写 DPLL 推导英文 401 token vs 符号 222 token，比 0.55，code point 比 0.23；warm(英文) 285 token）→ `results/instrument_control.json`，进论文附录 | 脚本已运行 |
+| 11 | 成本 | `cot_compress/cost.py` + `train.py --dry-run`（20 步 → results/dry_run_<arm>.json：每步墙钟 / gen 与 train 拆分 / token / 显存峰值 / 400 步 × 矩阵 run 数的 GPU 小时与费用） | 待 GPU |
+
+## 已按用户 2026-09-18 决定落实
+1. 主格 = 天然 S=1，均匀构造 + 拒绝；两簇拼接与 S=2 数据删除（S=2 手工实例只在单测里作算法测试）。策略检测器里没有"簇识别"标记（从未加入），无需删除。
+2. 准入八条按用户原文（见第 6 行）。注意第 4 条按字面在 ≥0.5M 的每个预算点比较，native 在 0.5M 处接近 chance 时会空成立地失败——`test_filler_literal_at_half_M` 固定了这一行为。
+3. 解码器 k∈{0,1}，k=1 仪器检查。
+4. 密码检查按 `endpoints.cipher_check`（按题共现贪心配对后 Spearman ≥ 0.85）。
+5. oracle：门槛 c=2.5，报 c=2 / 3。**S=1 下 oracle 文字数恒为 N+1**（根传播文字 + 一个被否定的决策文字 + 其余全部赋值 = N+1；n10 的 3000 题全部为 11），故 oracle 下限 = 22 / 27.5 / 33 token（n10），第 8 条 M ≥ 137.5 token 与操纵门 L ≥ 55 token 只是形式，按你的话记录即可。
+6. LoRA 只挂 embed_tokens，lm_head 不挂，不做 untied 副本（README、docs/lora_embed_sync.md、cloud_log 已记）；GPU 上仍要跑 `scripts/10_check_lora_embed_sync.py`，训练侧只看 `variants["q+embed"].ok`。
+
+## 数据集报告（data/kk/*.report.json）
+- kk_n10_s1：train 2000 / stop 500 / report 500，规范形各自全部不同、跨划分零重叠；S 全为 1；oracle 文字数全为 11；根传播文字数 0 占约 70%、1 占 20%、2 占 7%、≥3 占 3%；形式分布 x=y ≈ 0.25、x!=y ≈ 0.25、其余 7 种各 0.06–0.09（均匀采样，S=1 筛选带来的选择效应）。
+- kk_n12_s1：见 `data/kk/kk_n12_s1_seed0.report.json`。

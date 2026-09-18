@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+runs/
+samples/
+cloud_pull/
+archive/
+results/cups_archive/
+*.log
+*.jsonl.zst
+tb/

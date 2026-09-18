@@ -1,0 +1,22 @@
+# v8 矩阵（2026-09-18）：格 = 准入通过的第一个 ordering 格（默认 ord_n8_h4_d5；run_matrix --key 覆盖）。第一条必须是 A seed 1。
+# 顺序：A1（--dry-run 20 步测速 → 收敛；操纵门）→ Bwarm_sft s1（只依赖 A1，立刻做）→ B1 → 200 步 warm 判定（B1 在 ≤200 步的最佳准确率 < A1 最佳 − 15pp → 记 cold_start_failure）
+#       → B2–4 → A2–3（各自收敛后跟随同 seed 的 Bwarm_sft）→ A″×2 → C_rand×2 → 条件 Bwarm-RL×2。
+# priority 越小越先被 --max-runs 裁。
+defaults: {config: configs/cloud_4b.yaml, steps: 400}
+runs:
+  - {key: ord_n8_h4_d5, arm: A,     lam: 0.5, seed: 1, priority: 99, speed_test: true}
+  - {key: ord_n8_h4_d5, arm: Bwarm_sft, seed: 1, priority: 99, source: A_seed}
+  - {key: ord_n8_h4_d5, arm: B,     lam: 0.5, seed: 1, priority: 99, warm_check: true}
+  - {key: ord_n8_h4_d5, arm: B,     lam: 0.5, seed: 2, priority: 99}
+  - {key: ord_n8_h4_d5, arm: B,     lam: 0.5, seed: 3, priority: 99}
+  - {key: ord_n8_h4_d5, arm: B,     lam: 0.5, seed: 4, priority: 3}
+  - {key: ord_n8_h4_d5, arm: A,     lam: 0.5, seed: 2, priority: 99}
+  - {key: ord_n8_h4_d5, arm: Bwarm_sft, seed: 2, priority: 99, source: A_seed}
+  - {key: ord_n8_h4_d5, arm: A,     lam: 0.5, seed: 3, priority: 3}
+  - {key: ord_n8_h4_d5, arm: Bwarm_sft, seed: 3, priority: 3,  source: A_seed}
+  - {key: ord_n8_h4_d5, arm: A2,    lam: 0.5, seed: 1, priority: 99}
+  - {key: ord_n8_h4_d5, arm: A2,    lam: 0.5, seed: 2, priority: 2}
+  - {key: ord_n8_h4_d5, arm: Crand, lam: 0.5, seed: 1, priority: 1,  set: ["train.crand_source=auto"]}
+  - {key: ord_n8_h4_d5, arm: Crand, lam: 0.5, seed: 2, priority: 1,  set: ["train.crand_source=auto"]}
+  - {key: ord_n8_h4_d5, arm: Bwarm, lam: 0.5, seed: 1, priority: 99, conditional: cold_start_failure, set: ["train.init_from=auto"]}
+  - {key: ord_n8_h4_d5, arm: Bwarm, lam: 0.5, seed: 2, priority: 99, conditional: cold_start_failure, set: ["train.init_from=auto"]}

@@ -1,0 +1,56 @@
+# 云端主配置：Qwen3-4B bf16 LoRA，A100 80GB，vLLM 采样（TRL colocate）。继承 local_1p7b.yaml，只列覆盖项。
+# 用法: python scripts/train.py --config configs/cloud_4b.yaml --arm B --set train.seed=1
+#
+# 路径选择（README §9）：model.use_unsloth=false → TRL 原生 GRPOTrainer + PEFT + use_vllm colocate + rollout_func。
+#   原因：Unsloth 的 fast_inference（自带 vLLM）不暴露 logits_processors，臂 B 的屏蔽和预算强制注入不进去；
+#   TRL>=0.25 的 rollout_func 让我们自己调 llm.generate(SamplingParams(logits_processors=[VLLMSpanProcessor]))。
+#   若第一小时验收发现 vLLM 版本不接受 per-request logits_processors（V1 引擎），先 export VLLM_USE_V1=0 再试。
+# !! 需要 trl>=0.25；先跑 scripts/00_check_env.py 确认 rollout_func == true（install_cloud.sh 已内置该断言）。
+_base: local_1p7b.yaml
+reward:
+  lambda: 0.5                # v4 单值
+model:
+  name: Qwen/Qwen3-4B
+  use_unsloth: false         # TRL 原生路径（见上）；true = 本地同款 Unsloth 路径（无 vLLM）
+  load_in_4bit: false
+  fast_inference: false      # 不用 Unsloth 自带 vLLM；vLLM 由 TRL colocate 管理（train.use_vllm）
+  max_seq_length: 6144       # prompt(≤512) + cap 5120 + 答案区
+  dtype: bfloat16
+task:
+  key: ord_n8_h4_d5          # v8 主任务：唯一线性序 + 析取（ordering）；候选格顺序 (8,4,5) (8,4,6) (9,5,6) (9,5,7)，先格统计预筛再准入；kk / cups 退出主线
+  direct_check_n: 2000       # v8 残留检查：每 50 步在 direct-check 划分上测直接作答
+  eval_n: 500                # stopping-eval 500 题（split=stop）；reporting-eval 500 题只在 06_diagnose 用
+  eval_every: 50             # 停止判据按 50 步区间：连续两个区间 ΔL<5% 且 Δacc<4pp
+  m_n: 32
+generation:
+  hook: vllm                 # TRL colocate + 引擎级 SpanLogitsProcessor（generation_kwargs.extra_args）；rollout_func 在 0.25.1 只接 server 模式，不用
+  backend: vllm              # eval 也走 vLLM（HF generate 在 300 题 × 3k token 下每次 eval 约 20 min，vLLM 约 5 min）
+  batch_size: 64
+  eval_batch_size: 64
+  max_new_tokens_think: 5120 # = train.max_completion_length（cap 3072 是本地 8GB 遗留；云端 4096 → 5120：cups_n8_k20 在 5120 下强制收尾 11.8%，2026-09-17）
+train:
+  num_generations: 16
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 32    # 1 × 32 = 32 条 / 步 = 2 个 prompt × G=16；smoke A 在 micro-batch 2 时训练峰值 73.9 GiB / reserved 78.4（几乎 OOM）→ 改 1
+  max_completion_length: 5120        # 云端默认 cap（eval 与训练都用）；TRL 的 vLLM max_model_len = 512 + 5120
+  learning_rate: 1.0e-5
+  warmup_steps: 10                   # v7：10 步 warmup（constant_with_warmup）
+  stop_dacc: 0.04                    # 停止判据 Δacc < 4pp
+  lora_r: 32
+  lora_alpha: 64
+  lora_embed_lm_head: auto           # v7：+ embed_tokens（lm_head 不挂：tied embeddings）；auto = 按 results/lora_embed_sync_check.json 的 q+embed 门控（不通过则全臂去掉并记日志）
+  dry_run_steps: 20
+  matrix_for_projection: configs/matrix_core.yaml
+  gradient_checkpointing: true       # HF 原生梯度检查点（TRL 路径）
+  use_vllm: true
+  vllm_mode: colocate
+  vllm_gpu_memory_utilization: 0.45  # 36 GB：权重 7.6 + KV ~27 GB（32 条 × 5.6k token × 147 KB/token）；训练侧留 ~44 GB
+  save_every: 25                     # 云上可能被抢占：每 25 步存，run_matrix 自动 --resume
+  save_total_limit: 2                # 只留最近 2 个 checkpoint；final/ 另存（B_seq 的 init_from 用）
+  max_steps: 400                     # 或提前停止：连续两个 50 步区间 ΔL_mean<5% 且 Δacc<3pp
+  beta: 0.0                          # 默认 0；可设 0.01（KL 的参考分布同样在该臂 mask 下重归一化）
+  init_from: null                    # 臂 Bwarm / --eval-only：runs/Bwarm_sft_<tag>/final
+  crand_source: null                 # 臂 C_rand：runs/<B run>（取收敛轨迹的长度分布与 unigram）
+cost:
+  usd_per_hour: 1.9                  # A100 80GB 现价（--dry-run 投影用）
+  eval_min_per_eval: 5.0             # 每次 eval（500 题 vLLM）约 5 min，计入投影
