@@ -112,20 +112,37 @@ def run_variant(name, model_dir, targets, args, report):
     report["variants"][name] = rec
     del llm, peft_model, base; gc.collect(); torch.cuda.empty_cache(); time.sleep(3)
 
+VARIANTS = {"q_only": ["q_proj"], "q+embed": ["q_proj", "embed_tokens"], "q+embed+lmhead_tied": ["q_proj", "embed_tokens", "lm_head"]}   # 最后一个是阴性演示（tied → lm_head delta 不同步）
+
+def _dist_env():
+    """与 TRL 0.25.1 colocate 相同：external_launcher 需要 RANK / LOCAL_RANK / WORLD_SIZE 与 rendezvous 地址（单进程）。"""
+    import socket
+    os.environ.setdefault("RANK", "0"); os.environ.setdefault("LOCAL_RANK", "0"); os.environ.setdefault("WORLD_SIZE", "1")
+    os.environ.setdefault("MASTER_ADDR", "localhost")
+    if "MASTER_PORT" not in os.environ:
+        with socket.socket() as sk: sk.bind(("", 0)); os.environ["MASTER_PORT"] = str(sk.getsockname()[1])
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3-4B"); ap.add_argument("--out", default="results/lora_embed_sync_check.json")
     ap.add_argument("--gpu-util", type=float, default=0.35); ap.add_argument("--tol", type=float, default=0.05)
+    ap.add_argument("--variant", choices=list(VARIANTS), help="只跑一个变体（每个变体单独进程：一个进程一个 vLLM 引擎 / 一次分布式初始化）")
     args = ap.parse_args()
-    import vllm, trl, transformers, peft
-    report = dict(model=args.model, versions=dict(vllm=vllm.__version__, trl=trl.__version__, transformers=transformers.__version__, peft=peft.__version__), variants={})
+    if args.variant:
+        _dist_env()
+        report = dict(variants={})
+        run_variant(args.variant, args.model, VARIANTS[args.variant], args, report)
+        json.dump(report["variants"][args.variant], open(args.out, "w"), indent=1); return
+    import subprocess, vllm, trl, transformers, peft
     from transformers import AutoConfig
-    report["tie_word_embeddings"] = bool(getattr(AutoConfig.from_pretrained(args.model), "tie_word_embeddings", False))
-    run_variant("q_only", args.model, ["q_proj"], args, report)
-    run_variant("q+embed", args.model, ["q_proj", "embed_tokens"], args, report)
-    run_variant("q+embed+lmhead_tied", args.model, ["q_proj", "embed_tokens", "lm_head"], args, report)     # 阴性演示：tied 时 lm_head delta 不同步
+    report = dict(model=args.model, versions=dict(vllm=vllm.__version__, trl=trl.__version__, transformers=transformers.__version__, peft=peft.__version__), variants={},
+                  tie_word_embeddings=bool(getattr(AutoConfig.from_pretrained(args.model), "tie_word_embeddings", False)))
+    for name in VARIANTS:
+        part = str(pathlib.Path(args.out).with_suffix(f".{name.replace('+', '_')}.json"))
+        rc = subprocess.call([sys.executable, __file__, "--model", args.model, "--gpu-util", str(args.gpu_util), "--tol", str(args.tol), "--variant", name, "--out", part])
+        report["variants"][name] = json.load(open(part)) if rc == 0 and pathlib.Path(part).exists() else dict(ok=False, error=f"subprocess rc={rc}")
     pathlib.Path(args.out).parent.mkdir(parents=True, exist_ok=True); json.dump(report, open(args.out, "w"), indent=1)
-    print("\nSUMMARY:", {k: v["ok"] for k, v in report["variants"].items()}, "->", args.out)
+    print("\nSUMMARY:", {k: v.get("ok") for k, v in report["variants"].items()}, "->", args.out)
 
 if __name__ == "__main__":
     main()
