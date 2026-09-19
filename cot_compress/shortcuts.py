@@ -4,9 +4,9 @@
   perm_enum       : 全排列枚举——出现 "n!"、n! 的数值（40320 / 362880）、"all permutations"、"itertools"，或 ≥ 8 个不同的 n 事件全排列
   assign_enum     : 析取分配枚举 = 对剩余分配立方体的系统覆盖：≥4 个不同的 d 位 0/1 串；或编号 case 最大号 ≥ 2^(d−1) 且不同编号 ≥ max(4, 2^(d−1))；或提到 Gray code；或嵌套 try-both 标记 ≥ d
   guess_verify    : ≥3 个全排列各自后随（80 字符内）check / verify / valid / satisf / violat / ✓ / ✗ 标记
-策略类（strategy_class）：
+策略类（strategy_class）——**纯描述量**，不进任何门、不参与任何判定或读法：
   english_case（含字母的分情况叙述：assume/suppose/case + then）、symbolic_case（» § ¿ 等符号分情况、字母占比 < 0.3）、propagation（传播词/符号为主、无分情况标记）、
-  enumeration（探索分支数 > 3 × 2^S，分支 = 分情况标记 + try）、mixed_probe_enum（先有 probing 模式"if…contradiction/cycle"再枚举）、
+  enumeration（探索分支数 > 3 × 2^S，分支 = 分情况标记 + try）、mixed_probe_enum（enum 且（propagation 标记 ≥1 或 try-both 标记））、
   path_stitching（无分情况标记；断言的 a<b 对（链展开）≥90% 是题面边，且存在长度 ≥ n/2 的链）、other。优先级：enum/mixed → case → path → propagation → other。
 复制率 copy_rate：≥4 token 的 IR 复制片段占 think 段比例（strategy.copy_rate）。
 """
@@ -21,7 +21,6 @@ _GRAY = re.compile(r"\bgray\s*code\b", re.I)
 _TRYBOTH = re.compile(r"\b(try\s+both|either\s+way|both\s+branches|both\s+cases)\b|\?\?", re.I)
 _CASE_NUM = re.compile(r"\b(?:case|branch|option)\s*#?\s*(\d+)\b", re.I)
 _VERIFY = re.compile(r"\b(check|verif\w*|valid|satisf\w*|violat\w*|holds|fails?)\b|[✓✗]", re.I)
-_PROBE = re.compile(r"\b(if|suppose|assume|¿|»)\b[^.\n]{0,80}?\b(contradiction|cycle|impossible|conflict|×)\b", re.I)
 _PAIR = re.compile(r"(?<![\d(])(\d+)\s*<\s*(\d+)(?![\d)])")           # 断言 a<b（排除括号内的析取复制）
 
 def permutations_in(text: str, n: int) -> list[str]:
@@ -83,8 +82,8 @@ def strategy_class(think: str, prompt: str, n: int, S: int, tok=None) -> dict:
         for a, b in re.findall(r"(\d+)<(\d+)", it): ir_edges.add((int(a), int(b)))
     ap = asserted_pairs(think); on_ir = (sum(1 for p in ap if p in ir_edges) / len(ap)) if ap else None
     enum = branches > 3 * (2 ** max(S, 0))
-    probe_first = bool(_PROBE.search(think)) and enum and (_PROBE.search(think).start() < (max((m.start() for m in _TRYBOTH.finditer(think)), default=len(think))))
-    if enum and probe_first: cls = "mixed_probe_enum"
+    mixed = enum and (prop >= 1 or bool(_TRYBOTH.search(think)))            # r3：mixed_probe_enum = enum 且（propagation 标记 或 try-both 标记）
+    if mixed: cls = "mixed_probe_enum"
     elif enum: cls = "enumeration"
     elif case >= 1 and lf >= 0.3: cls = "english_case"
     elif case >= 1: cls = "symbolic_case"

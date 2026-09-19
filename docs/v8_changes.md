@@ -13,6 +13,25 @@
 | 9 | 测试 | 见各行；沿用 mask / logprob / C_rand / B_warm / 奖励穷举 | `python -m pytest tests -q`：94 通过、2 跳过（opt-in 10k），7.3 min；ORD_FULL 10k 通过 |
 | 10 | 文档 | README §2 v8 + 预注册 hash 占位；本文件；`scripts/13_instrument_control.py` 改用排序题（英文 152 token / 符号 84 / warm 107；比 0.55 / 0.70；无捷径命中）→ `results/instrument_control.json`（K&K 版存 `_kk.json`） | 脚本已运行 |
 
+## r3 冻结修订（2026-09-19；r2 `288c874` 作废）
+| # | 修订 | 文件 | 测试 |
+|---|---|---|---|
+| 1 | 残留检查：acc ≥ 冻结 direct + 10pp 后生效（锁存）；direct ≥ acc − (acc − frozen_direct)/2 连续两次；C_rand 豁免 | `cot_compress/stopping.py`（新）、`train.py::EvalCallback` | `test_stopping.py` |
+| 2 | 准入 1：direct ≤ 2×2^−d，direct-check 2000 题；1/#LE 只报 | `admission.py`、`01_calibrate.py` | `test_admission.py` |
+| 3 | kill：L_median ≤ 1.5 × decision_lb_tokens["2.5"] 中位数（取等） | `run_matrix.py` | `test_run_matrix_prune_gate_retune`（边界） |
+| 4 | 同构类规则 = eval 与 train 不相交（检查 iso_overlap == 0；报告重生成） | `tasks/ordering.py`、README | `test_ordering.py` |
+| 5 | 匹配 y = min_臂（各 seed 自身收敛预算处 isotonic acc 的等权均值）− 5pp；不可计算 = 任一臂曲线不穿过 y*（未穿过的个别 seed 记 non_crossing、不进税） | `endpoints.py`、`analyze.py` | `test_endpoints.py`、`test_analyze_matrix.py` |
+| 6 | C_rand seed i 绑 B seed i；长度每 prompt 组抽一次（数据集每行一个 prompt、G 条共享） | `matrix_core.yaml`、`run_matrix.py` 文档、README | 矩阵断言 |
+| 7 | 停止判据分母用后一次 eval；`designated_ckpt.json`（converged / max_steps / uninterpretable） | `stopping.py`、`train.py` | `test_stopping.py` |
+| 8 | 策略类纯描述（analyze 附项标 descriptive only，无读法）；mixed_probe_enum = enum 且（propagation 或 try-both 标记） | `shortcuts.py`、`analyze.py` | `test_strategy_classes` |
+| 9 | 档位区间化（`tier_interval`：bootstrap 区间两端同档才给档；三单位同档才声称）；README §3 / §4 重写 | `endpoints.py`、`analyze.py`、README | `test_tier_v8_and_zstd_units`、analyze 测试 |
+| 10 | Bwarm_sft s2 / s3 在 A2 / A3 之后；B_warm-RL 前预算投影检查（`budget_projection`，`cost.budget_usd`） | `run_matrix.py`、`cloud_4b.yaml` | 矩阵顺序 + budget 断言 |
+| 11 | 准入 5 移植配对 = 随机错位 `admission.derangement` | `admission.py`、`01_calibrate.py` | `test_derangement_*` |
+| 12 | M = 准入 500 条原生轨迹中位数（train.py 对 ord 键读 admission json）；B_warm-SFT 评估挂 B 的 mask（`--arm Bwarm --eval-only`）；直接作答差 >3pp 标 "not comparable" | `train.py`、`analyze.py` | analyze 测试 |
+| 13 | README：mask 写明 `</think>` 豁免；case 标记与字母占比定义引用 shortcuts.py | README §2.2 / §2.2b | — |
+另：`scripts/analyze.py` 文件头 docstring 在 r1 / r2 里仍是 v7 旧文（一次未断言的替换静默失败），r3 已整体重写；代码逻辑不受影响。
+注：准入第 5 条用 derangement；`06_diagnose.py` 的诊断 2（E3 (ii) 移植）仍用"他题中长度最接近的轨迹"，未改。
+
 ## r2 冻结修正（2026-09-19；r1 `eceff232` 作废）
 1. `results/whitelist_extra_banned.json`（287 id）与 `results/whitelist_audit.md` 纳入 git（`.gitignore` 例外）；白名单 B = 8351、A″ = 8455（README §2.2b）。r1 漏了该文件，按 r1 树算出的是 8638 / 8742。
 2. `run_matrix.first_run_gate`：2× 条件改用 Kahn 下限中位（c=2.5）；新增 kill 判定（A1 收敛 L_median < 1.5× 决策下限中位 → 停矩阵不重调）；`oracle_lb_median(key, c, which)`；测试 `test_run_matrix_prune_gate_retune` 覆盖。

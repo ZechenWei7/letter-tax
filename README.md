@@ -23,7 +23,7 @@
 - 决策深度 S：DPLL，传播器 = 传递闭包（硬边 ∪ 已选边）+ 单元规则（一边被闭包否定 → 另一边被迫；一边被蕴含 → 视为已定）；failed-disjunct probing = **单边试、仅闭包**（只加这一边算闭包，不做进一步单元传播），出环则另一边被迫；叶 = 全序或冲突；S = 最小决策树深度；只保留 S ≥ 1。
   **性质（实测记录）**：若 probe 内也做单元传播（一层 lookahead），引导生成的全部唯一解实例都变成 S=0——即这些题都能被一层 lookahead 解掉；S≥1 是相对"单边试、仅闭包"这一固定传播器定义的。
 - 两个下限：决策下限 = d + n 个元素；Kahn 下限 = 沿 σ 的就绪集轨迹（就绪 = 硬边 ∪ 已定边闭包下无未放前驱，再经 failed-element probing 单独试、只算闭包剪枝）的就绪集元素数之和；各 × c ∈ {2, 2.5, 3}。
-- 格统计（在引导生成的最终分布上算；命中拒格规则则拒，`tasks/ordering.cell_decision`）：#LE(hard) 中位 ≥20；**闭包传播下第一次非单元素就绪集的位置中位 ≤ n/2**（"单元素步占比 ≤0.8" 已作废：与 S=1 天然冲突；占比只报）；硬偏序最大反链中位 ≥3；无向被提及图哈密顿路径数中位 ≥3；probing 后存活析取数中位 ≥3；S≥1 保留率 ≥1%；全结构同构类 eval ⊄ train；S 分布、析取冗余率。
+- 格统计（在引导生成的最终分布上算；命中拒格规则则拒，`tasks/ordering.cell_decision`）：#LE(hard) 中位 ≥20；**闭包传播下第一次非单元素就绪集的位置中位 ≤ n/2**（"单元素步占比 ≤0.8" 已作废：与 S=1 天然冲突；占比只报）；硬偏序最大反链中位 ≥3；无向被提及图哈密顿路径数中位 ≥3；probing 后存活析取数中位 ≥3；S≥1 保留率 ≥1%；全结构同构类 eval 与 train 不相交；S 分布、析取冗余率。
   **实测（stop 划分 500 题）**：
 
   | 格 | #LE(hard) 中位 | 首次非单元素就绪集位置中位（直方图） | 单元素步占比中位（只报） | 反链 | 哈密顿路径 | 存活析取 | 冗余率 | S 分布 | Kahn 下限中位（元素） | 决策下限 | 均匀接受率 | 引导接受率 | S≥1 保留率 | 判定 |
@@ -40,10 +40,11 @@
 
 ### 2.2 捷径与策略检测器（`cot_compress/shortcuts.py`，训练前冻结）
 - 捷径（进准入门，<5%）：IR 抄写 + 尾随顺序；全排列枚举；析取分配枚举（位串 / 编号 case / Gray 码 / 嵌套 try-both）；guess-then-verify 循环。
-- 策略类（只报告）：英文分情况、符号分情况、传播为主、枚举（探索分支数 > 3× DPLL 最小值 2^S）、先 probe 再枚举、路径拼接（只用题面边连路）、其他；复制率 = ≥4 token IR 片段占比。人工抽样审计 `scripts/14_strategy_audit.py`（每臂 50 条 → 精确率 / 召回率表）。冻结原生轨迹（01_calibrate）与每臂收敛后正确轨迹（06_diagnose）都跑。
+- 策略类（**纯描述量**，不进任何门、不参与任何判定或读法）：英文分情况、符号分情况、传播为主、枚举（探索分支数 > 3× DPLL 最小值 2^S）、mixed_probe_enum（= 枚举 且（propagation 标记 ≥1 或 try-both 标记））、路径拼接（只用题面边连路）、其他；复制率 = ≥4 token IR 片段占比。
+  定义以 `cot_compress/shortcuts.py` 为准：**case 标记** = `strategy.ROLES["case_splits"]`（assume / suppose / case / if）及其 B_warm 符号（» § ¿）的出现次数，分支数 = case 标记 + `try` 次数；**字母占比** = `lengths.letter_fraction`（think 段非空白字符中 Unicode L* 类字符的比例；英文 / 符号分情况以 0.3 为界，A 的"低字母占比"同为 <30%）。人工抽样审计 `scripts/14_strategy_audit.py`（每臂 50 条 → 精确率 / 召回率表）。冻结原生轨迹（01_calibrate）与每臂收敛后正确轨迹（06_diagnose）都跑。
 
 ### 2.2b 白名单（`cot_compress/vocab_mask.py` + `results/whitelist_extra_banned.json`，均入 git）
-think 阶段 allowed set（Qwen3 分词器，embedding 行数 151936）：臂 B（letterfree）= **8351** 个 token；臂 A″（letterfree ∪ 单字母 token，带 / 不带前导空格，共 104 个）= **8455**；臂 A = 全词表。
+think 阶段 allowed set（Qwen3 分词器，embedding 行数 151936）：allowed = 解码后只含 Unicode N* / P* / S* / 空白的 token（无 U+FFFD 字节碎片、无其他 special token、无 `<answer>` 分词片段），**外加豁免 `</think>`**（该 token 含字母，但它是结束思考、解除屏蔽的唯一出口，始终允许；mask 在第一个 `</think>` 处解除，预算到顶时由控制器强制写入 `</think>\n\n<answer>`，强制 token 不进损失）。臂 B（letterfree）= **8351** 个 token（含 `</think>`）；臂 A″（letterfree ∪ 单字母 token，带 / 不带前导空格，共 104 个）= **8455**；臂 A = 全词表。
 审计追加禁集 287 个 id（NFKC 后为字母、带圈 / 括号拉丁字母、区域指示符、可 leet 反解的词；`results/whitelist_audit.md`）已从白名单中扣除——不含该文件时会得到 8638 / 8742，属错误配置（r1 冻结 `eceff232` 漏了该文件，已作废）。
 
 ### 2.3 B_warm（`cot_compress/warm.py`，映射表 `docs/warm_map.md`）
@@ -55,33 +56,36 @@ think 阶段 allowed set（Qwen3 分词器，embedding 行数 151936）：臂 B�
 - **前缀切法**：每条轨迹的 think 段按**字符长度**的 0.25 / 0.5 / 0.75 / 1.0 切四个前缀（不是按 token）；特征对切出的前缀文本再分词。仪器门：任一臂 next 准确率 ≥90% 且在该臂的移植轨迹**和** C_rand 轨迹上都掉 ≥10pp（配对 bootstrap）；B 条款只在 B 解析率 ≥50% 时生效。另报 soundness / completeness、B_warm 映射配对的密码 Spearman（描述量）。
 
 ### 2.5 准入 §4.2（`cot_compress/admission.py`；冻结 Qwen3-4B，n=500，全部通过）
-先按 2.1 的格统计规则筛，再上 GPU 做八条：(1) 直接作答 exact（`<think></think>` 预填）≤ 2 × chance，chance = 1/#LE(hard)；逐对准确率 vs 硬偏序均匀随机扩展作诊断；严格与宽松抽取都报，准入用严格；(2) 原生 exact ∈ [60,80]%（S≥1 总体）；(3) 强制预算曲线 {0.1,0.25,0.5,0.75,1.0}×M 到 native−5pp 的最小预算 ≥0.5M；(4) 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 10pp 内；(5) 原生轨迹移植 i→j（预填，只生成答案）使准确率向 direct 掉一半以上；(6) 冻结 letter-ban ≤ direct+10pp；(7) 捷径检测器命中 <5%；(8) 中位原生长度 ≥ 5 × Kahn 下限（c=2.5）。
-训练后残留检查：每 50 步在 direct-check 2000 题上，(带轨迹 − 直接) < 冻结差距的一半，连续两次 → 停 run，标不可解释；E1 比较要求臂间训练后直接作答差 ≤3pp。
+先按 2.1 的格统计规则筛，再上 GPU 做八条：(1) 直接作答 exact（`<think></think>` 预填）≤ 2 × 2^−d，**在 direct-check 2000 题上测**；1/#LE(hard) 只报；逐对准确率 vs 硬偏序均匀随机扩展作诊断；严格与宽松抽取都报，准入用严格；(2) 原生 exact ∈ [60,80]%（S≥1 总体）；(3) 强制预算曲线 {0.1,0.25,0.5,0.75,1.0}×M 到 native−5pp 的最小预算 ≥0.5M；(4) 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 10pp 内；(5) 原生轨迹移植 i→j（预填，只生成答案；配对 = 随机错位 derangement，`admission.derangement`）使准确率向 direct 掉一半以上；(6) 冻结 letter-ban ≤ direct+10pp；(7) 捷径检测器命中 <5%；(8) 中位原生长度 ≥ 5 × Kahn 下限（c=2.5）。
+M（奖励里的长度归一化）= 准入这 500 条原生轨迹的中位长度（`results/admission_<key>.json["M"]`），不再用 M.json 的 32 题。
+训练后残留检查（`cot_compress/stopping.py`；**C_rand 豁免**）：每 50 步在 direct-check 2000 题上测直接作答；**仅当带轨迹 acc ≥ 冻结 direct + 10pp 之后生效**（锁存）；停止条件 direct ≥ acc_trace − (acc_trace − frozen_direct)/2 连续两次 → 停 run，标不可解释；E1 比较要求臂间训练后直接作答差 ≤3pp，否则标 "not comparable"。
 
 ### 2.6 训练（`scripts/train.py`，`configs/cloud_4b.yaml`，`configs/matrix_core.yaml`）
-臂 A×3、A″×2、B×4、C_rand×2、B_warm-SFT（每个 A seed 一个）、B_warm-RL×2（条件：B1 在 ≤200 步的最佳准确率 < A1 最佳 − 15pp）。LoRA attention + MLP + embed_tokens（lm_head tied 不挂；embed 按 `scripts/10` 的 q+embed 门控），r=32 α=64 dropout 0，lr 1e-5 warmup 10；奖励 v4（v 只在答案区）；训练 T=1.0，评估 T=0.6 top-p 0.95 top-k 20；停止：连续两个 50 步区间 ΔL<5% 且 Δacc<4pp（stopping-eval 500 题上的 L_mean 与 acc）。
+臂 A×3、A″×2、B×4、C_rand×2、B_warm-SFT（每个 A seed 一个）、B_warm-RL×2（条件：B1 在 ≤200 步的最佳准确率 < A1 最佳 − 15pp）。LoRA attention + MLP + embed_tokens（lm_head tied 不挂；embed 按 `scripts/10` 的 q+embed 门控），r=32 α=64 dropout 0，lr 1e-5 warmup 10；奖励 v4（v 只在答案区）；训练 T=1.0，评估 T=0.6 top-p 0.95 top-k 20；停止：连续两个 50 步区间 |ΔL|/L_后一次 <5% 且 |Δacc|<4pp（stopping-eval 500 题上的 L_mean 与 acc；**分母用后一次 eval**）。400 步未收敛 → 以 step-400 为指定 checkpoint；每个 run 结束写 `designated_ckpt.json`（converged / max_steps / uninterpretable）。
 **step-0 eval 计入判定历史**：训练开始前的 eval（step 0，即冻结策略）进入 `hist`，因此最早可在 step 100 触发收敛停止（需要 step 0 / 50 / 100 三个点构成两个连续区间）；残留检查的连续计数同样从 step 0 开始。
-操纵门（A seed 1，`run_matrix.first_run_gate`）：相对 step-0 eval token（L_mean）减少 ≥30%、acc 损失 ≤5pp、收敛 L_median ≥ 2 × **Kahn 下限**中位（c=2.5，与 §4.2 第 8 条同一下限；c=2 / 3 只报）；失败按 λ=0.3 → λ=1.0 → G=32 重调。**kill 判定**：A1 收敛 L_median < 1.5 × **决策下限**（d+n）中位（c=2.5）→ 矩阵直接停下报告，不重调。
-残留检查：每 50 步在 direct-check 2000 题上测直接作答，(带轨迹 − 直接) < 冻结差距/2 连续两次 → 停 run 标不可解释；收敛时臂间直接作答差 ≤3pp 才可比。run_matrix 顺序：A1（20 步测速 → 收敛，操纵门）→ Bwarm-SFT s1（只依赖 A1，立刻做）→ B1 → 200 步 warm 判定 → B2–4 → A2–3（各自收敛后跟随同 seed 的 Bwarm-SFT）→ A″ → C_rand → 条件 Bwarm-RL。
+操纵门（A seed 1，`run_matrix.first_run_gate`）：相对 step-0 eval token（L_mean）减少 ≥30%、acc 损失 ≤5pp、收敛 L_median ≥ 2 × **Kahn 下限**中位（c=2.5，与 §4.2 第 8 条同一下限；c=2 / 3 只报）；失败按 λ=0.3 → λ=1.0 → G=32 重调。**kill 判定**：A1 收敛 L_median ≤ 1.5 × `decision_lb_tokens["2.5"]` 中位数 → 矩阵直接停下报告，不重调（kill = "压到底了没有空间"，重调 = "压不动"，两者互斥）。
+残留检查见 §2.5（acc ≥ 冻结 direct + 10pp 后生效；direct ≥ acc − (acc − 冻结 direct)/2 连续两次；C_rand 豁免）；收敛时臂间直接作答差 ≤3pp 才可比，否则 "not comparable"。
+C_rand seed i 绑 B seed i（think 段 unigram 与长度分布取自同 seed 的 B 收敛轨迹）；think 长度**每个 prompt 组抽一次**（同组 G 条生成共享同一段上下文）。B_warm-SFT 的评估挂 B 的 mask（`--arm Bwarm --eval-only`，letterfree）。run_matrix 顺序：A1（20 步测速 → 收敛，操纵门）→ Bwarm-SFT s1（只依赖 A1，立刻做）→ B1 → 200 步 warm 判定 → B2–4 → A2 → Bwarm-SFT s2 → A3 → Bwarm-SFT s3 → A″ → C_rand → 条件 Bwarm-RL（跑之前检查预算投影：已花 + 待跑 × 每 run 投影 vs `cost.budget_usd`，超则不跑）。
 
 ### 2.7 端点 §4.5（`cot_compress/endpoints.py`，`scripts/analyze.py`）
-E1：每个收敛策略的强制预算曲线（自身收敛长度 0.1…1.0 倍，reporting-eval，每 seed isotonic）；y = 总准确率（外化并列），x = 正确轨迹 token（无条件长度并列）；匹配 y = A/A″/B 都达到的最高 y − 5pp；税按题配对 bootstrap，seed 等权分块；seed 级 Mann-Whitney 敏感性表；token / code point / zstd-19 bits（并集字典 + 各臂字典），三单位同档才声称；档 ≥67 / ≥25 / 10–25 / <10 / ≤−10；附：冻结→A 压缩、A 主流策略类内的税（枚举 = 探索分支 > 3× DPLL 最小值，人工审计样本 `scripts/14_strategy_audit.py`）、对两个下限的比、按题匹配长度、A 字母占比（低 = <30%）；任一臂无匹配点 → E1 不计算，输出无匹配论文表。
+E1：每个收敛策略的强制预算曲线（自身收敛长度 0.1…1.0 倍，reporting-eval，每 seed isotonic）；y = 总准确率（外化并列），x = 正确轨迹 token（无条件长度并列）；匹配 y = min_臂（该臂各 seed **自身收敛预算处** isotonic acc 的等权均值）− 5pp；税按题配对 bootstrap，seed 等权分块；seed 级 Mann-Whitney 敏感性表；token / code point / zstd-19 bits（并集字典 + 各臂字典）；档位区间：[67,∞) strong / [25,67) moderate / [10,25) small / (−10,10) none / (−∞,−10] negative；**区间化**：每个单位的 bootstrap 区间两端同档才给档（跨档只报 span），三单位同档才声称；附：冻结→A 压缩、A 主流策略类内的税（枚举 = 探索分支 > 3× DPLL 最小值，人工审计样本 `scripts/14_strategy_audit.py`）、对两个下限的比、按题匹配长度、A 字母占比（低 = <30%）；**不可计算 = 任一臂曲线不穿过匹配 y**（该臂没有任何 seed 的 isotonic 曲线达到 y*；个别未达到的 seed 记入 non_crossing、不进税）→ 输出无匹配论文表。策略类内的税等附项均为纯描述，不产生任何读法。
 E2：B_warm-SFT 总准确率在源 A 5pp 内才有效，长度比 = 编码税，按 A seed 报；否则"词承载结构或映射有损"。
 E3（对 B 必需）：(i) B > C_rand 匹配长度（按题配对，seed 分块）；(ii) 移植和 unigram 重采样各使 B 准确率向训练后 direct 掉一半以上；(iii) 复制率 <30%。解码器：仅前缀 n-gram（n≤3）词袋，复制片段掩掉；标签 = 目标题真值（答案一致的析取选择、真实就绪集 / 下一事件），按发布的解析器对齐模型步数，绝不从轨迹读；解析不了的前缀排除，报解析率。仪器门：任一臂 ≥90% 且在该臂移植 / C_rand 轨迹上掉 ≥10pp；B 的条款只在 B 解析率 ≥50% 时生效。soundness / completeness 和密码统计为描述量。
 
-## 3. Success Criteria（写定，不事后改）
+## 3. Success Criteria（v8，写定，不事后改）
 
-三条同时满足才算验证：
+判定全部由 §2.5（准入）、§2.6（门 / 残留检查）、§2.7（E1 / E2 / E3）的预注册规则给出，不另设口头标准：
+1. E1 可计算（三臂曲线都穿过匹配 y，臂间训练后直接作答差 ≤3pp，无不可解释的 run）；
+2. 税的档位按区间化规则给出（每个单位的 bootstrap 区间两端同档，且 token / code point / zstd bits 三单位同档）；
+3. 对 B 的任何正面表述都以 E3 (i)–(iii) 全部满足为前提；解码器结论以仪器门通过为前提。
 
-1. 臂 B 准确率 ≥ 臂 0 − 5pp；
-2. 臂 B 平均思考 token 数 ≤ 臂 A 的 70%；
-3. 内容度量表明臂 B 的思考段携带计算状态：截断到 50% 时准确率显著下降、打乱后准确率显著下降、线性探针在思考段中段以后对当前杯子状态的预测显著高于随机。同时臂 B 思考文本在冻结参考模型（Qwen3-0.6B-Base）下的困惑度显著高于臂 A。
+## 4. 预期结果的读法（v8，写定）
 
-## 4. 预期结果的三种读法（写定）
-
-- 臂 B 准确率 ≥ 臂 0 − 5pp 且 token ≤ 臂 A 的 70% 且内容度量显示有内容 → 非语言表示更密，猜想成立。
-- 臂 B 准确率恢复但 token 与臂 A 相当 → 语言压缩后已接近信息下限，非语言无额外优势；这是对上述三篇论文的修正。
-- 臂 B 准确率恢复不了（含预热后）→ 该规模下推理离不开语言载体或训练量不足，结论模糊，如实报告。
+- 税的 bootstrap 区间整体落在 [25,67) 或 [67,∞)（三单位同档）且 E3 满足 → 无字母表示在匹配准确率下更短，报告该档（moderate / strong）。
+- 区间整体落在 (−10,10) → 无税：长度优化后的自然语言已与无字母表示等长。
+- 区间整体落在 (−∞,−10] → 负税，单独报告。
+- 区间跨档（或三单位不同档）→ 只报区间与 span，不声称档位。
+- E1 不可计算、直接作答差 >3pp（"not comparable"）、或 B 冷启动失败且 B_warm-RL 未恢复 → 不作长度比较，输出无匹配表与 E2（B_warm-SFT 有效则报编码税，否则"词承载结构或映射有损"）。
 
 ## 5. 内容度量（eval.py 必做）
 

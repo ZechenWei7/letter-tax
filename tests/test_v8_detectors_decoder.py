@@ -34,8 +34,9 @@ def test_strategy_classes():
     assert SC.strategy_class(prop, IR, n, S)["strategy_class"] == "propagation"
     enum = " ".join(f"case {i}: try side {i % 2}" for i in range(8))
     assert SC.strategy_class(enum, IR, n, S)["strategy_class"] == "enumeration"
-    mixed = "if 3<0 then cycle. " + enum
-    assert SC.strategy_class(mixed, IR, n, S)["strategy_class"] == "mixed_probe_enum"
+    assert SC.strategy_class("so we propagate. " + enum, IR, n, S)["strategy_class"] == "mixed_probe_enum"      # enum 且 propagation 标记
+    assert SC.strategy_class("try both sides. " + enum, IR, n, S)["strategy_class"] == "mixed_probe_enum"       # enum 且 try-both 标记
+    assert SC.strategy_class("so we propagate, try both", IR, n, S)["strategy_class"] != "mixed_probe_enum"     # 非 enum
     path = "0<1, 1<2, 2<3 so 0<1<2<3."
     r = SC.strategy_class(path, IR, n, S); assert r["strategy_class"] == "path_stitching" and r["asserted_on_ir_frac"] == 1.0
     assert SC.strategy_class("hmm 42", IR, n, S)["strategy_class"] == "other"

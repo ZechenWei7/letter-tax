@@ -1,9 +1,10 @@
 """云端批量启动（v8）：按矩阵顺序跑 run，每个 run 结束跑内容诊断（reporting-eval）。
 - --key 覆盖矩阵里所有 run 的格（准入通过的格）。speed_test: true 的 run 先 --dry-run 20 步（写 results/dry_run_*.json）再正式跑。
 - warm_check: true 的 run（B1）跑完后读其 eval.jsonl 中 step ≤ 200 的最佳准确率，与 A1 的最佳准确率比：< A1 − 15pp → cold_start_failure=True（写 results/warm_decision_<key>.json），
-  条件项 Bwarm（conditional: cold_start_failure）据此决定是否跑。Bwarm_sft 项 source: A_seed → 用同 seed 的 A run 作 SFT 源。
+  条件项 Bwarm（conditional: cold_start_failure）据此决定是否跑；跑之前做预算投影检查（budget_projection：已花 + 待跑 × 每 run 投影 vs cost.budget_usd，超则不跑）。
+  Bwarm_sft 项 source: A_seed → 用同 seed 的 A run 作 SFT 源（s1 紧跟 A1；s2 / s3 分别在 A2 / A3 之后）。C_rand seed i 绑 B seed i（crand_source=auto）；think 长度每个 prompt 组抽一次（G 条生成共享）。
 - 第一个 run 固定为 A seed 1（操纵门）：相对臂 0（step-0 eval）token 减少 ≥ 30%、acc 损失 ≤ 5pp、且收敛 L_median ≥ 2× Kahn 下限（c=2.5，stopping-eval 中位；c=2 / 3 只报）。
-  kill 判定：A1 收敛 L_median < 1.5× 决策下限（d+n，c=2.5）→ 矩阵直接停下报告，不重调。
+  kill 判定：A1 收敛 L_median ≤ 1.5 × decision_lb_tokens["2.5"] 中位数 → 矩阵直接停下报告，不重调。
   不满足 → 按 λ=0.3 → λ=1.0 → G=32 顺序重调 A s1（tag _lam0.3 / _lam1.0 / _G32）；某次通过则后续全部 run 继承该设置；全失败 → 停下报告。
 - --max-runs N：按 priority（越小越先裁）裁剪；C_rand(1) → A″(2) → A/B(3)。
 - 抢占恢复：已有 checkpoint 自动 --resume；已有 final/ 跳过。
@@ -52,6 +53,22 @@ def warm_decision(key, lam, thr=0.15):
     dec = dict(A1_best=a, B1_best_upto200=b, cold_start_failure=(None if a is None or b is None else b < a - thr))
     json.dump(dec, open(ROOT / f"results/warm_decision_{key}.json", "w"), indent=1); return dec
 
+def budget_projection(cfg_path, n_extra_runs: int) -> dict:
+    """B_warm-RL 前的预算检查：已花 GPU 小时（各 run steps.jsonl 的 sec 之和）+ n_extra_runs × 每 run 投影小时（results/dry_run_*.json），
+    × cost.usd_per_hour，对比 cost.budget_usd（未设 → ok=None，只记录投影）。超预算 → 不跑 B_warm-RL。"""
+    from cot_compress.config import load_config
+    cfg = load_config(cfg_path); cost = cfg.get("cost", {}) or {}
+    usd_h = float(cost.get("usd_per_hour", 1.9)); budget = cost.get("budget_usd")
+    spent_h = 0.0
+    for f in (ROOT / "runs").glob("*/steps.jsonl"):
+        spent_h += sum(json.loads(l).get("sec", 0) for l in open(f)) / 3600
+    per_run = [json.load(open(f))["projection"]["hours_per_run_incl_eval"] for f in (ROOT / "results").glob("dry_run_*.json")]
+    h_run = max(per_run) if per_run else None
+    proj_h = (spent_h + n_extra_runs * h_run) if h_run is not None else None
+    ok = None if (budget is None or proj_h is None) else (proj_h * usd_h <= float(budget))
+    return dict(ok=ok, spent_gpu_hours=round(spent_h, 1), hours_per_run=h_run, n_extra_runs=n_extra_runs, projected_gpu_hours=(round(proj_h, 1) if proj_h is not None else None),
+                projected_usd=(round(proj_h * usd_h) if proj_h is not None else None), budget_usd=budget)
+
 def cold_start_failure(key, lam, thr=0.15):
     f = ROOT / f"results/warm_decision_{key}.json"
     if f.exists():
@@ -96,14 +113,14 @@ def prune(runs, max_runs):
 
 def first_run_gate(run_dir: pathlib.Path, min_reduction=0.30, max_acc_loss=0.05, oracle_lb=None, oracle_mult=2.0, kill_lb=None, kill_mult=1.5) -> dict:
     """操纵门（A seed 1）：token 减少 ≥30%、acc 损失 ≤5pp、收敛 L_median ≥ 2 × Kahn 下限中位（c=2.5）。
-    kill 判定：收敛 L_median < 1.5 × 决策下限中位（c=2.5）→ kill=True（矩阵直接停下报告，不进入 λ / G 重调）。"""
+    kill 判定：收敛 L_median ≤ 1.5 × decision_lb_tokens["2.5"] 中位数 → kill=True（"压到底了没有空间"；矩阵直接停下报告，不进入 λ / G 重调——重调是"压不动"，两者互斥）。"""
     ev = [json.loads(l) for l in open(run_dir / "eval.jsonl")]
     e0 = next((e for e in ev if e["step"] == 0), None); e1 = ev[-1]
     if e0 is None:
         return dict(ok=False, reason="no step-0 eval (arm 0 anchor missing)")
     red = 1 - e1["L_mean"] / max(e0["L_mean"], 1); loss = e0["acc"] - e1["acc"]
     above_oracle = (e1["L_median"] >= oracle_mult * oracle_lb) if oracle_lb is not None else None
-    kill = (e1["L_median"] < kill_mult * kill_lb) if kill_lb is not None else False
+    kill = (e1["L_median"] <= kill_mult * kill_lb) if kill_lb is not None else False
     return dict(ok=(red >= min_reduction and loss <= max_acc_loss and above_oracle is not False and not kill), kill=kill, token_reduction=round(red, 3), acc_loss=round(loss, 3),
                 kahn_lb_c2_5=oracle_lb, decision_lb_c2_5=kill_lb, L_median_final=e1["L_median"], above_2x_kahn=above_oracle,
                 arm0=dict(L=e0["L_mean"], acc=e0["acc"]), final=dict(step=e1["step"], L=e1["L_mean"], acc=e1["acc"]))
@@ -149,6 +166,12 @@ def main():
             with open(log, "a") as f: f.write(f"- cold-start check for {run_name(r)}: failure={fail} best_externalized={json.dumps(best)}\n")
             if not fail:
                 print(f"[skip] {run_name(r)}: conditional cold_start_failure not met ({best})"); continue
+            n_left = sum(1 for q in [r] + queue if q.get("conditional") == "cold_start_failure" and not (ROOT / "runs" / run_name(q) / "final").exists())
+            bp = budget_projection(cfg, n_left)                          # r3：B_warm-RL 前检查预算投影
+            with open(log, "a") as f: f.write(f"- budget projection before {run_name(r)}: {json.dumps(bp)}\n")
+            print(f"[budget] {json.dumps(bp)}", flush=True)
+            if bp["ok"] is False:
+                print(f"[skip] {run_name(r)}: projected spend exceeds cost.budget_usd — B_warm-RL not run", flush=True); continue
         name = run_name(r); rd = ROOT / "runs" / name
         tag = f"_{r['key']}_s{int(r['seed'])}{r.get('tag', '')}"
         sets = [f"reward.lambda={float(r['lam'])}", f"task.key={r['key']}", f"train.seed={int(r['seed'])}",
@@ -192,7 +215,7 @@ def main():
                 f.write(f"- first-run gate {name}: {json.dumps(g)}\n")
             print(f"[gate] {json.dumps(g)}", flush=True)
             if g.get("kill"):
-                print("[gate] KILL: converged L_median < 1.5 × decision lower bound (c=2.5) — matrix stopped for review (no retune)", flush=True); return
+                print("[gate] KILL: converged L_median <= 1.5 × median decision_lb_tokens[2.5] — matrix stopped for review (no retune)", flush=True); return
             if not g["ok"]:
                 k = r.get("_retune", 0)
                 if k >= len(RETUNE):

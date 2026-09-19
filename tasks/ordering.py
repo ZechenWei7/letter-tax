@@ -7,7 +7,7 @@
   叶 = 闭包为全序 或 冲突；S = 最小决策树深度（截断 MAX_S）。只保留 S ≥ 1。
 - 下限：决策下限 = d + n 个元素；Kahn 下限 = 就绪集轨迹（状态 = 前缀 + 剩余集合，就绪集经 failed-element probing 剪枝）沿 σ 的就绪集元素数之和；各 × c ∈ {2,2.5,3}。
 - 每格统计（cell_stats / cell_decision）：#LE(hard) 中位 ≥20；闭包传播下第一次非单元素就绪集的位置中位 ≤ n/2（单元素步占比只报）；硬偏序最大反链中位 ≥3；无向被提及图哈密顿路径数中位 ≥3；
-  probing 后存活析取数中位 ≥3；S≥1 保留率 ≥1%；全结构同构类 eval ⊄ train；S 分布；析取冗余率（去掉该条仍唯一的比例）。
+  probing 后存活析取数中位 ≥3；S≥1 保留率 ≥1%；全结构同构类 eval 与 train 不相交；S 分布；析取冗余率（去掉该条仍唯一的比例）。
 - 划分：train 2000 / stop 500 / report 500 / direct 2000（direct-check），seed 流互不相交；每题事件随机重编号、约束与析取两边顺序随机。规范形去重（同构）。
 - IR 题面（所有臂相同）：
     n=8
@@ -577,6 +577,6 @@ def cell_decision(rep: dict, split: str = "stop") -> dict:
         "ham_paths_median_ge_3": s["ham_paths_median"] >= RULES["ham_paths_median_ge"],
         "surviving_disj_median_ge_3": s["surviving_disj_median"] >= RULES["surviving_disj_median_ge"],
         "retention_S_ge1_ge_1pct": (g.get("retention_S_ge1") is None) or g["retention_S_ge1"] >= RULES["retention_S_ge1_ge"],
-        "eval_iso_classes_not_subset_of_train": not s.get("iso_classes_subset_of_train", False),
+        "eval_iso_classes_disjoint_from_train": s.get("iso_overlap_with_train", 0) == 0,
     }
     return dict(ok=all(checks.values()), checks=checks, S_dist=s["S_dist"], redundancy_mean=s["redundancy_mean"])

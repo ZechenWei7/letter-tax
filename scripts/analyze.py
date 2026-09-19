@@ -1,14 +1,15 @@
-"""汇总分析 v7（§8 端点）：读各 run 的 diagnostics.json / diagnostics_rows.jsonl（reporting-eval），输出 results/analysis_<key>.json + .md。
-E1  匹配准确率下的税：每臂每 seed 的强制预算曲线（0.1…1.0 × 自身长度；y = 外化准确率 = acc − 训练后 direct；x = 正确轨迹 token 数），
-    每 seed isotonic 单调化；y* = A/A″/B 全部达到的最高 y − 5pp；任一臂在 y* 的 5pp 内无点 → E1 不计算。
-    税 = (L_A − L_B)/L_A 按 seed 配对 + 范围 + seed 级精确单边 Mann-Whitney；三种单位：token / code point / zstd-19 共享字典 bits。
-    阈值 25% / 67%；<10% 无税；≤ −10% 负税单独报告。
-    附加：冻结→A 的压缩量（A 各 seed step-0 eval 的 L vs 收敛 L）；A 主流策略类内的税；按题匹配的次要长度（同题 A/B 都答对的 L 比）；A 的字母占比曲线（"低" = <30%）。
-E2  B_warm-SFT 的外化准确率在源 A 的 5pp 内才有效；长度比 L_Bwarm / L_A = 编码税。
-E3  B > C_rand（每 seed 外化准确率）；移植与 unigram 重采样各使 B 外化准确率向训练后 direct 掉一半以上；复制率 < 30%；
-    解码器（k=S，主格 k=1）在 B 上比移植 / C_rand 基线高 ≥ 10pp（results/decoder_<key>.json）；替换密码检查（B token 频率与 A 词频 Spearman ≥ 0.85 判为密码 → 阴性）。
-其他：训练后逐臂 direct ≤ 冻结 direct + 10pp（不满足 → 该臂长度结果标记不可解释）；冷启动失败判定（B 各 seed 最佳外化准确率 < A 最佳 − 15pp）。
-用法: python scripts/analyze.py --key kk_n10_s1 [--runs-dir runs] [--copy-thr 0.3]
+"""汇总分析 v8 r3（§4.5 端点）：读各 run 的 diagnostics.json / diagnostics_rows.jsonl / diag_budget*.jsonl.zst（reporting-eval），输出 results/analysis_<key>.json + .md。
+E1  每个收敛策略的强制预算曲线（自身收敛长度 0.1…1.0 倍，每 seed isotonic）；y = 总准确率（外化并列），x = 正确轨迹 token（无条件长度并列）。
+    匹配 y* = min_臂（该臂各 seed 自身收敛预算处 isotonic acc 的等权均值）− 5pp，臂 ∈ {A, A″, B}；任一臂曲线不穿过 y* → "E1 不可计算"，输出无匹配表。
+    税 = (L_A − L_B)/L_A：按题配对 bootstrap（同一份重采样用于所有臂 / seed，seed 等权分块，200 次）；seed 级精确单边 Mann-Whitney 作敏感性表。
+    三单位：token / code point / zstd-19 bits（并集字典 + 各臂字典）。档位区间化：[67,∞) strong / [25,67) moderate / [10,25) small / (−10,10) none / (−∞,−10] negative；
+    每个单位的 bootstrap 区间两端同档才给档（跨档只报 span），三单位同档才声称。臂间训练后直接作答差 > 3pp → 标 "not comparable"。
+    附（纯描述，不参与任何判定或读法）：冻结→A 压缩量；A 主流策略类内的税；L 对两个下限（决策 / Kahn，c=2.5）的比；按题匹配长度；A 字母占比曲线（低 = <30%）。
+E2  B_warm-SFT 总准确率在源 A 5pp 内才有效，长度比 = 编码税，按 A seed 报；否则"词承载结构或映射有损"。
+E3（对 B 必需）(i) B > C_rand（C_rand seed i 绑 B seed i；按题配对、seed 分块 bootstrap）；(ii) 移植与 unigram 重采样各使 B 准确率向训练后 direct 掉一半以上；(iii) 复制率 < 30%；
+    解码器仪器门与 B 条款、soundness / completeness、密码统计（描述量）读 results/decoder_<key>.json。
+其他：训练后逐臂 direct ≤ 冻结 direct + 10pp（不满足 → 该臂标不可解释）；训练中残留检查停掉的 run（uninterpretable.json）同样标记；designated_ckpt.json 记指定 checkpoint。
+用法: python scripts/analyze.py --key ord_n8_h4_d5 [--runs-dir runs] [--copy-thr 0.3]
 """
 import sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[1]; sys.path.insert(0, str(ROOT))
@@ -72,7 +73,8 @@ def analyze(runs, key, copy_thr=0.3, decoder=None, frozen_direct=None):
         for s, v in sv.items():
             if (pathlib.Path(v["dir"]) / "uninterpretable.json").exists(): R["direct_check"][a][str(s)]["residual_stop"] = True
     dmeans = {a: statistics.mean(v["diag"]["direct_acc"] for v in sv.values()) for a, sv in runs.items() if a in ARMS_E1 and sv}
-    R["direct_comparable_le_3pp"] = dict(ok=(bool(dmeans) and max(dmeans.values()) - min(dmeans.values()) <= 0.03), direct_means=dmeans)
+    _ok = bool(dmeans) and max(dmeans.values()) - min(dmeans.values()) <= 0.03
+    R["direct_comparable_le_3pp"] = dict(ok=_ok, label=("comparable" if _ok else "not comparable"), direct_means=dmeans)
     # ---- E1 ----
     from cot_compress.endpoints import bootstrap_tax, zstd_bits_per_token, tier_v8
     curves = {a: {s: curve_of(v["diag"]) for s, v in runs.get(a, {}).items()} for a in ARMS_E1 if a in runs}
@@ -81,7 +83,8 @@ def analyze(runs, key, copy_thr=0.3, decoder=None, frozen_direct=None):
     E1 = dict(matched=ma, curves={a: {str(s): c for s, c in sv.items()} for a, sv in curves.items()},
               curves_externalized={a: {str(s): curve_of(v["diag"], "externalized") for s, v in runs.get(a, {}).items()} for a in ARMS_E1 if a in runs},
               unconditional_tokens={a: {str(s): {f: p.get("mean_tokens_all") for f, p in v["diag"].get("budget_points", {}).items()} for s, v in runs.get(a, {}).items()} for a in ARMS_E1 if a in runs})
-    E1["no_match_table"] = {a: {str(s): dict(top_y=max(y for _, y in c), L_at_top=max(c, key=lambda p: p[1])[0], L_median=runs[a][s]["diag"]["L_median"], acc=runs[a][s]["diag"]["acc"])
+    from cot_compress.endpoints import own_budget_acc
+    E1["no_match_table"] = {a: {str(s): dict(top_y=max(y for _, y in c), own_budget_acc=own_budget_acc(c), L_at_own_budget=max(c, key=lambda p: p[0])[0], L_median=runs[a][s]["diag"]["L_median"], acc=runs[a][s]["diag"]["acc"])
                                 for s, c in sv.items()} for a, sv in curves.items()}
     if ma["computable"]:
         y = ma["y_star"]
@@ -110,16 +113,20 @@ def analyze(runs, key, copy_thr=0.3, decoder=None, frozen_direct=None):
             for unit, sc in scales.items():
                 LA = {s: L["A"][s] * (sc["A"][s] if sc else 1) for s in L.get("A", {}) if L["A"][s]}; LB = {s: L["B"][s] * (sc["B"][s] if sc else 1) for s in L.get("B", {}) if L["B"][s]}
                 t = tax_by_seed(LA, LB) if LA and LB else None
-                tax[unit] = dict(point=(t["mean"] if t else None), per_seed=(t["per_seed"] if t else None), tier=tier_v8(t["mean"] if t else None), mann_whitney=(t["mann_whitney_LB_lt_LA"] if t else None), L=L)
+                tax[unit] = dict(point=(t["mean"] if t else None), per_seed=(t["per_seed"] if t else None), tier=None, tier_span=None, tier_point=tier_v8(t["mean"] if t else None),
+                                 note="no bootstrap interval → no tier claimed", mann_whitney=(t["mann_whitney_LB_lt_LA"] if t else None), L=L)
         # seed 级 Mann-Whitney 敏感性（token）
         Lt = (tax.get("tokens") or {}).get("L") or {}
         if Lt.get("A") and Lt.get("B"):
             E1["mann_whitney_sensitivity"] = mann_whitney_exact([v for v in Lt["B"].values() if v], [v for v in Lt["A"].values() if v], "less")
-        tiers = {u: t.get("tier") for u, t in tax.items()}
-        E1["tax"] = tax; E1["tiers"] = tiers
-        E1["claim"] = dict(same_tier_all_units=(len({tiers.get(u) for u in ("tokens", "code_points", "zstd_bits_union_dict")}) == 1), tier=(tiers.get("tokens") if len({tiers.get(u) for u in ("tokens", "code_points", "zstd_bits_union_dict")}) == 1 else None))
+        tiers = {u: t.get("tier") for u, t in tax.items()}; spans = {u: t.get("tier_span") for u, t in tax.items()}
+        E1["tax"] = tax; E1["tiers"] = tiers; E1["tier_spans"] = spans
+        three = [tiers.get(u) for u in ("tokens", "code_points", "zstd_bits_union_dict")]
+        same = all(x is not None for x in three) and len(set(three)) == 1                     # 区间化：每个单位的 bootstrap 区间两端同档，且三单位同档
+        E1["claim"] = dict(same_tier_all_units=same, tier=(three[0] if same else None))
     else:
         E1["verdict"] = "E1 不可计算：" + str(ma.get("reason"))
+    if not R["direct_comparable_le_3pp"]["ok"]: E1["comparability"] = "not comparable"
     # 附加
     extra = {}
     if "A" in runs:
@@ -138,7 +145,7 @@ def analyze(runs, key, copy_thr=0.3, decoder=None, frozen_direct=None):
                 xs = [r["think_tokens"] for r in v["rows"] if r.get("correct") and r.get("strategy", {}).get("strategy_class") == dom]
                 return statistics.median(xs) if xs else None
             LA = {s: x for s, x in ((s, medL(v)) for s, v in runs["A"].items()) if x}; LB = {s: x for s, x in ((s, medL(v)) for s, v in runs["B"].items()) if x}
-            extra["tax_within_A_dominant_class"] = dict(dominant_class=dom, tax=(tax_by_seed(LA, LB) if LA and LB else None))
+            extra["tax_within_A_dominant_class"] = dict(dominant_class=dom, tax=(tax_by_seed(LA, LB) if LA and LB else None), status="descriptive only")
         if "B" in runs:
             per = {}
             for s in set(runs["A"]) & set(runs["B"]):

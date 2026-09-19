@@ -215,7 +215,13 @@ def run_admission(args):
             print(f"  wrote {out}", flush=True)
             continue
         # 1) direct、2) native（含 M）
-        d_rows = run_eval(model, tok, key, items, "direct", gen_cfg, seed=args.seed); direct = summarize(d_rows)["acc"]
+        if key.startswith("ord_"):                  # r3：第 1 条在 direct-check 2000 题上测（训练中残留检查用同一划分）；stop 500 上的 direct 并报
+            d_items = tasks.make_eval_set(key, 2000, split="direct")
+            d_rows = run_eval(model, tok, key, d_items, "direct", gen_cfg, seed=args.seed); direct = summarize(d_rows)["acc"]
+            direct_stop500 = summarize(run_eval(model, tok, key, items, "direct", gen_cfg, seed=args.seed))["acc"]
+        else:
+            d_items = items; direct_stop500 = None
+            d_rows = run_eval(model, tok, key, items, "direct", gen_cfg, seed=args.seed); direct = summarize(d_rows)["acc"]
         HOOK.enabled = True
         nat = run_eval(model, tok, key, items, "think", gen_cfg, seed=args.seed); native = summarize(nat)["acc"]
         Ls = [r["think_tokens"] for r in nat]; M = float(statistics.median(Ls))
@@ -230,9 +236,9 @@ def run_admission(args):
             template_rate = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"])["any"]
             oracle_lb = {c: float(statistics.median(it["meta"]["kahn_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}     # 第 8 条用 Kahn 下限
             decision_lb = {c: float(statistics.median(it["meta"]["decision_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}
-            pw = [task.pairwise_accuracy([int(x) for x in r["pred"].split()], it["meta"]["sigma"]) for r, it in zip(d_rows, items) if r.get("pred")]
+            pw = [task.pairwise_accuracy([int(x) for x in r["pred"].split()], it["meta"]["sigma"]) for r, it in zip(d_rows, d_items) if r.get("pred")]
             pairwise_direct = statistics.mean(x for x in pw if x is not None) if any(x is not None for x in pw) else None
-            pairwise_baseline = statistics.mean(it["meta"]["stats"].get("pairwise_baseline") or task.pairwise_baseline(pk["n"], [tuple(h) for h in it["meta"]["hard"]], it["meta"]["sigma"]) for it in items)
+            pairwise_baseline = statistics.mean(it["meta"]["stats"].get("pairwise_baseline") or task.pairwise_baseline(pk["n"], [tuple(h) for h in it["meta"]["hard"]], it["meta"]["sigma"]) for it in d_items)
             S_dist = dict(Counter(str(it["meta"]["S"]) for it in items))
             chance = 1.0 / statistics.median(it["meta"]["stats"]["n_le_hard"] for it in items)
             strat = class_distribution([strategy_class(think_text(r["completion"]), it["prompt"], pk["n"], it["meta"]["S"]) for r, it in zip(nat, items)])
@@ -266,7 +272,9 @@ def run_admission(args):
             filler[f] = summarize(prefilled_answer_eval(model, tok, key, items, th, gen_cfg, seed=args.seed, batch_size=gen_cfg["batch_size"], tag=f"filler{f}"))["acc"]
         print(f"  filler_curve={filler}", flush=True)
         # 5) 原生轨迹移植 i→j（同长度）
-        th = [st.sample_transplant(it["id"], len(st.by_item[it["id"]][0]) if st.by_item.get(it["id"]) else None, rng) for it in items]
+        from cot_compress.admission import derangement                       # r3：移植配对 = 随机错位（题 i 用题 π(i) 的原生轨迹，π 无不动点）
+        pi = derangement(len(items), rng)
+        th = [st.by_item[items[pi[i]]["id"]][0] for i in range(len(items))]
         transplant = summarize(prefilled_answer_eval(model, tok, key, items, th, gen_cfg, seed=args.seed, batch_size=gen_cfg["batch_size"], tag="transplant"))["acc"]
         # 6) 冻结模型 + letter-free mask
         HOOK.configure(tok, reserve=reserve, banned_ids=lf_banned, mask_mode="letterfree")
@@ -278,7 +286,8 @@ def run_admission(args):
                        budget_curve={str(k): v for k, v in budget.items()}, filler_curve={str(k): v for k, v in filler.items()},
                        transplant_acc=transplant, masked_frozen_acc=masked, native_gloss=native_gloss, template_hit_rate=template_rate,
                        oracle_lb=oracle_lb, S_dist=S_dist, target_S=(task.parse_key(key)["s"] if key.startswith("kk_") else None),
-                       native_lenient=nat_s["lenient_acc"], direct_lenient=summarize(d_rows)["lenient_acc"],
+                       native_lenient=nat_s["lenient_acc"], direct_lenient=summarize(d_rows)["lenient_acc"], direct_n=len(d_rows), direct_stop500=direct_stop500,
+                       d=(task.parse_key(key)["d"] if key.startswith("ord_") else None), transplant_pairing="derangement",
                        strategy_class_native=(strat if key.startswith("ord_") else None),
                        kahn_lb=(oracle_lb if key.startswith("ord_") else None), decision_lb=(decision_lb if key.startswith("ord_") else None),
                        pairwise_direct=(pairwise_direct if key.startswith("ord_") else None), pairwise_baseline=(pairwise_baseline if key.startswith("ord_") else None))

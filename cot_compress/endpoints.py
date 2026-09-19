@@ -2,7 +2,7 @@
 E1 匹配准确率与税：
   每臂每 seed 的强制预算曲线点 (x_f, y_f)，f ∈ 0.1…1.0 × 自身收敛长度；y = 外化准确率 = acc_f − 训练后 direct；x = 该预算下正确轨迹的 token 数均值。
   每 seed 曲线做 isotonic（PAVA，y 随 x 非降）单调化。
-  匹配准确率 y* = min_{臂 ∈ A, A″, B} (该臂所有 seed / 点的最高 y) − 5pp；任一臂没有点落在 y* 的 5pp 内 → E1 不计算。
+  匹配准确率 y*（r3）= min_{臂 ∈ A, A″, B}（该臂各 seed 自身收敛预算处 isotonic acc 的等权均值）− 5pp；任一臂曲线不穿过 y* → E1 不计算。
   L_arm,seed(y*) = 单调化曲线上首次达到 y* 的 x（线性插值）。税 = (L_A − L_B)/L_A（按 seed 配对），报 per-seed、范围、seed 级精确单边 Mann-Whitney（H1: L_B < L_A）。
   三种单位：token；code point（每臂 seed 的正确 think 段 code point/token 比换算）；zstd -19 共享字典比特（字典在所有臂正确 think 段并集的一半上训练，另一半算 bits/token）。
   阈值：≥67% 强、≥25% 中、<10% 无税；≤ −10% 负税单独报告。
@@ -44,18 +44,24 @@ def length_at(curve: list[tuple[float, float]], y_star: float) -> float | None:
         prev = (x, y)
     return None
 
-# ---------- matched accuracy ----------
+# ---------- matched accuracy（r3） ----------
+def own_budget_acc(curve: list[tuple[float, float]]) -> float:
+    """该 seed 在**自身收敛预算**（f=1.0，即曲线上 x 最大的点）处的 isotonic 准确率。"""
+    return max(curve, key=lambda p: p[0])[1]
+
 def matched_accuracy(curves: dict[str, dict[int, list[tuple[float, float]]]], arms=("A", "A2", "B"), margin: float = 0.05) -> dict:
-    """curves[arm][seed] = 单调曲线。返回 y*、可计算性与各臂最高 y。"""
+    """curves[arm][seed] = 单调曲线。匹配 y* = min_臂( 各 seed 自身收敛预算处 isotonic acc 的等权均值 ) − 5pp。
+    不可计算 = 任一臂没有任何 seed 的曲线穿过（达到）y*（length_at 为 None）；未穿过的个别 seed 记在 non_crossing 里、不进税。"""
     tops = {}
     for a in arms:
         if a not in curves or not curves[a]:
             return dict(y_star=None, computable=False, reason=f"arm {a} missing", tops=tops)
-        tops[a] = max(y for c in curves[a].values() for _, y in c)
+        tops[a] = statistics.mean(own_budget_acc(c) for c in curves[a].values())
     y_star = min(tops.values()) - margin
-    near = {a: any(abs(y - y_star) <= margin + 1e-9 for c in curves[a].values() for _, y in c) for a in arms}
-    ok = all(near.values())
-    return dict(y_star=y_star, computable=ok, reason=(None if ok else f"no point within {margin:.0%} of y* for arms {[a for a, v in near.items() if not v]}"), tops=tops, near=near)
+    crossing = {a: {s: length_at(c, y_star) is not None for s, c in curves[a].items()} for a in arms}
+    bad = [a for a in arms if not any(crossing[a].values())]
+    return dict(y_star=y_star, computable=not bad, reason=(None if not bad else f"curve of arm(s) {bad} does not cross matched y"), tops=tops,
+                crossing=crossing, non_crossing={a: [s for s, ok in crossing[a].items() if not ok] for a in arms})
 
 # ---------- Mann-Whitney exact one-sided ----------
 def mann_whitney_exact(a: list[float], b: list[float], alternative: str = "less") -> dict:
@@ -156,13 +162,20 @@ def _pearson(x, y):
 TIERS = ((0.67, "strong"), (0.25, "moderate"), (0.10, "small"))
 
 def tier_v8(t: float | None) -> str | None:
-    """档位：≥67 强 / ≥25 中 / 10–25 小 / <10 无税 / ≤−10 负税。"""
+    """点值 → 档位区间：[0.67, ∞) strong / [0.25, 0.67) moderate / [0.10, 0.25) small / (−0.10, 0.10) none / (−∞, −0.10] negative。
+    声称用 tier_interval（bootstrap 区间两端同档才给档）。"""
     if t is None: return None
     if t <= -0.10: return "negative"
     if t < 0.10: return "none"
     for thr, name in TIERS:
         if t >= thr: return name
     return "none"
+
+def tier_interval(lo: float | None, hi: float | None) -> dict:
+    """r3 区间化档位：bootstrap 区间 [lo, hi] 两端各自的档；两端同档 → tier = 该档（可声称）；跨档 → tier=None，报 span（如 "moderate–strong"）。"""
+    if lo is None or hi is None: return dict(tier=None, span=None, lo_tier=None, hi_tier=None)
+    tl, th = tier_v8(lo), tier_v8(hi)
+    return dict(tier=(tl if tl == th else None), span=(tl if tl == th else f"{tl}–{th}"), lo_tier=tl, hi_tier=th)
 
 def curve_from_items(per_item: dict, ids: list) -> list[tuple[float, float]]:
     """per_item[f] = {id: (correct: bool, tokens: int)} → 单调曲线 [(x=正确轨迹 token 均值, y=总准确率)]。"""
@@ -204,9 +217,10 @@ def bootstrap_tax(per_item_by_run: dict, ids: list, n_boot: int = 200, seed: int
         boots.append(t["mean"])
     boots.sort()
     q = lambda p: boots[min(len(boots) - 1, int(p * len(boots)))] if boots else None
+    ti = tier_interval(q(0.025), q(0.975))
     return dict(point=(point["mean"] if point else None), per_seed=(point["per_seed"] if point else None), y_star=(point["y_star"] if point else None),
                 boot_mean=(statistics.mean(boots) if boots else None), lo=q(0.025), hi=q(0.975), n_boot=len(boots), skipped_frac=skipped / n_boot,
-                tier=tier_v8(point["mean"] if point else None), L=(point["L"] if point else None))
+                tier=ti["tier"], tier_span=ti["span"], tier_point=tier_v8(point["mean"] if point else None), L=(point["L"] if point else None))
 
 def zstd_bits_per_token(segments_by_group: dict, tokens_by_group: dict, level: int = 19, seed: int = 0, per_group_dict: bool = False) -> dict:
     """每组的 zstd-19 bits/token：并集字典（per_group_dict=False）或各组自己的字典（True）；字典训练 / 测量对半分。"""

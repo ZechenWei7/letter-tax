@@ -169,7 +169,7 @@
    "ham_paths_median_ge_3": true,
    "surviving_disj_median_ge_3": true,
    "retention_S_ge1_ge_1pct": true,
-   "eval_iso_classes_not_subset_of_train": true
+   "eval_iso_classes_disjoint_from_train": true
   },
   "S_dist": {
    "1": 464,

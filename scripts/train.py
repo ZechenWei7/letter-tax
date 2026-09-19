@@ -16,7 +16,8 @@
 LoRA：attention + MLP + embed_tokens（lm_head 不挂：tied embeddings；embed 按 results/lora_embed_sync_check.json 门控，见 cot_compress/lora.py）；lr 1e-5，10 步 warmup。
 采样：训练 T=1.0 无 top-k/p；评估 T=0.6 top-p 0.95 top-k 20（generation.*）。
 停止判据：连续两个 50 步区间 ΔL_mean < 5% 且 Δacc < 4pp（stopping-eval 500 题，split=stop），或 max_steps（400）；报告用 reporting-eval（06_diagnose）。
-v8 残留检查：每 50 步在 direct-check 2000 题上测直接作答；(带轨迹 − 直接) < 冻结差距/2 连续两次 → 停 run 并标不可解释。
+残留检查（r3；C_rand 豁免）：每 50 步在 direct-check 2000 题上测直接作答；带轨迹 acc ≥ 冻结 direct + 10pp 后生效；direct ≥ acc − (acc − 冻结 direct)/2 连续两次 → 停 run 标不可解释。
+M = 准入 500 条原生轨迹中位长度（results/admission_<key>.json）。结束时写 designated_ckpt.json（收敛 step / 不可解释 step / 跑满 max_steps）。
 B 的命中率（exact、Hamming ≤ 2）每次 eval 记入 eval.jsonl（hit_exact / hit_hamming2）。
 NOTE: 第一个 import 必须是 cot_compress。
 """
@@ -109,27 +110,27 @@ class WorkspaceGuard(TrainerCallback):
         assert_checkpoint_saved(pathlib.Path(args.output_dir) / f"checkpoint-{state.global_step}")
 
 class EvalCallback(TrainerCallback):
-    """每 every 步 eval；停止判据：连续两个区间 ΔL_mean < 5% 且 Δacc < 4pp（或 max_steps）。
-    v8 残留检查：fn 返回 (L_mean, acc, residual)；residual = 带轨迹准确率 − direct-check 直接作答准确率；
-    residual < 冻结差距/2 连续两次 → 停 run，标不可解释（runs/<run>/uninterpretable.json）。"""
-    def __init__(self, fn, every, at_start, dl_rel=0.05, dacc=0.04, frozen_gap=None, run_dir=None):
+    """每 every 步 eval；判定逻辑在 cot_compress/stopping.py（可单测）：
+    收敛：连续两个区间 |ΔL_mean|/L_后一次 < 5% 且 |Δacc| < 4pp（stopping-eval 500 题；step-0 eval 计入历史），或 max_steps。
+    残留检查（C_rand 豁免）：fn 返回 (L_mean, acc, direct_now)；acc ≥ 冻结 direct + 10pp 后生效（锁存）；
+      direct_now ≥ acc − (acc − frozen_direct)/2 连续两次 → 停 run，标不可解释（runs/<run>/uninterpretable.json）。"""
+    def __init__(self, fn, every, at_start, dl_rel=0.05, dacc=0.04, frozen_direct=None, run_dir=None, arm=""):
+        from cot_compress.stopping import ResidualCheck
         self.fn, self.every, self.at_start, self.dl_rel, self.dacc = fn, every, at_start, dl_rel, dacc
-        self.frozen_gap, self.run_dir, self.low_streak = frozen_gap, run_dir, 0
-        self.hist = []
+        self.run_dir, self.resid = run_dir, ResidualCheck(frozen_direct, arm)
+        self.hist = []; self.stopped_converged = False; self.stopped_residual = False
     def _record(self, res, state, control):
-        L, acc = res[0], res[1]; resid = res[2] if len(res) > 2 else None
+        L, acc = res[0], res[1]; direct_now = res[2] if len(res) > 2 else None
         self.hist.append((L, acc))
-        if self.frozen_gap is not None and resid is not None:
-            self.low_streak = self.low_streak + 1 if resid < self.frozen_gap / 2 else 0
-            if self.low_streak >= 2:
-                json.dump(dict(step=state.global_step, residual=resid, frozen_gap=self.frozen_gap, reason="residual < frozen_gap/2 twice"), open(self.run_dir / "uninterpretable.json", "w"))
-                log_md(f"STOP: uninterpretable at step {state.global_step}: residual {resid:.3f} < frozen gap/2 ({self.frozen_gap/2:.3f}) twice")
-                control.should_training_stop = True
+        r = self.resid.update(acc, direct_now)
+        if r["stop"]:
+            json.dump(dict(step=state.global_step, acc_trace=acc, direct=direct_now, threshold=r["threshold"], frozen_direct=self.resid.frozen_direct,
+                           reason="direct >= acc_trace - (acc_trace - frozen_direct)/2 twice"), open(self.run_dir / "uninterpretable.json", "w"))
+            log_md(f"STOP: uninterpretable at step {state.global_step}: direct {direct_now:.3f} >= {r['threshold']:.3f} twice")
+            self.stopped_residual = True; control.should_training_stop = True
     def _converged(self):
-        if len(self.hist) < 3: return False
-        (l0, a0), (l1, a1), (l2, a2) = self.hist[-3:]
-        small = lambda lp, l, ap_, a: abs(l - lp) / max(lp, 1) < self.dl_rel and abs(a - ap_) < self.dacc
-        return small(l0, l1, a0, a1) and small(l1, l2, a1, a2)
+        from cot_compress.stopping import converged
+        return converged(self.hist, self.dl_rel, self.dacc)
     def on_train_begin(self, args, state, control, **kw):
         if self.at_start and state.global_step == 0:
             self._record(self.fn(0), state, control)
@@ -138,7 +139,7 @@ class EvalCallback(TrainerCallback):
             self._record(self.fn(state.global_step), state, control)
             if self._converged():
                 log_md(f"STOP: converged at step {state.global_step} (two consecutive intervals ΔL<{self.dl_rel:.0%}, Δacc<{self.dacc*100:.0f}pp)")
-                control.should_training_stop = True
+                self.stopped_converged = True; control.should_training_stop = True
 
 def main():
     ap = argparse.ArgumentParser()
@@ -164,7 +165,12 @@ def main():
     samples_dir = ROOT / "samples" / run_name; samples_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- M ----
-    Mrec = json.load(open(kcfg["m_file"]))[key]; M = float(Mrec["M"])
+    adm_path = ROOT / f"results/admission_{key}.json"
+    if key.startswith("ord_"):            # r3：M = 准入 500 条原生轨迹的中位长度（results/admission_<key>.json["M"]），不再用 M.json 的 32 题
+        assert adm_path.exists(), f"{adm_path} missing: run 01_calibrate.py --admission --keys {key} first (M comes from the 500 admission trajectories)"
+        M = float(json.load(open(adm_path))["M"])
+    else:
+        Mrec = json.load(open(kcfg["m_file"]))[key]; M = float(Mrec["M"])
 
     # ---- model ----
     m = cfg["model"]; use_unsloth = bool(m.get("use_unsloth", True))
@@ -259,10 +265,10 @@ def main():
     eval_gen = dict(gcfg, batch_size=int(gcfg.get("eval_batch_size", 4)), max_new_tokens_think=cap)
     eval_items = tasks.make_eval_set(key, int(kcfg["eval_n"]), seed=int(kcfg["seed"]), **({"split": "stop"} if key.startswith(("kk_", "ord_")) else {}))   # 停止判据只用 stopping-eval
     direct_items = tasks.make_eval_set(key, int(kcfg.get("direct_check_n", 2000)), split="direct") if key.startswith("ord_") else None   # v8 残留检查：direct-check 2000 题
-    frozen_gap = None
+    frozen_direct = None
     adm = ROOT / f"results/admission_{key}.json"
     if direct_items is not None and adm.exists():
-        _a = json.load(open(adm)); frozen_gap = float(_a["native"]) - float(_a["direct"])
+        frozen_direct = float(json.load(open(adm))["direct"])                 # 冻结 direct（direct-check 2000 题，准入第 1 条同一数）
     force_at = int(kcfg.get("eval_force_at", 1024))
     eval_backend = str(gcfg.get("backend", "hf"))
     import cot_compress.evaluate as _ev
@@ -320,10 +326,11 @@ def main():
             if key.startswith(("kk_", "ord_")):                           # 命中率（exact、Hamming ≤ 2）内部日志
                 hd = [task_mod.hamming(r["pred"] or "", r["gold"]) for r in rows]
                 met["hit_exact"] = s["acc"]; met["hit_hamming2"] = sum(1 for h in hd if h is not None and h <= 2) / len(rows); met["lenient_acc"] = s["lenient_acc"]
-            resid = None
-            if direct_items is not None:                                  # v8：direct-check 2000 题直接作答（当前策略）
+            direct_now = None
+            if direct_items is not None and args.arm != "Crand":          # 残留检查：direct-check 2000 题直接作答（当前策略）；C_rand 豁免
                 dr = summarize(run_eval(model, tok, key, direct_items, "direct", eval_gen, seed=0))
-                met["direct_acc"] = dr["acc"]; met["direct_n"] = len(direct_items); resid = s["acc"] - dr["acc"]; met["residual"] = resid; met["frozen_gap"] = frozen_gap
+                direct_now = dr["acc"]; met["direct_acc"] = direct_now; met["direct_n"] = len(direct_items); met["frozen_direct"] = frozen_direct
+                if frozen_direct is not None: met["residual_threshold"] = s["acc"] - (s["acc"] - frozen_direct) / 2
             with open(run_dir / "eval.jsonl", "a") as f:
                 f.write(json.dumps(met) + "\n")
             flag = " **FLAG forced_close>20%**" if s["forced_rate"] > 0.20 else ""
@@ -331,7 +338,7 @@ def main():
             log_md(f"eval {run_name} step {step}: acc={met['acc']:.2f} acc_clean={met['acc_clean']:.2f} viol={met['viol_rate']:.2f} acc@{force_at}={met['acc_force']:.2f} "
                    f"L_mean={met['L_mean']} L_med={met['L_median']} capped={met['capped_rate']:.2f} forced={s['forced_rate']:.2f}{flag} "
                    f"fmt_err={met['fmt_err']:.2f} mask_frac={mf if mf is None else round(mf, 3)} ppl={ppl if ppl is None else round(ppl, 1)} ({met['eval_min']} min)")
-            return (met["L_mean"], met["acc"], resid)
+            return (met["L_mean"], met["acc"], direct_now)
         finally:
             _ev.VLLM["llm"] = None
             if use_unsloth:
@@ -340,8 +347,9 @@ def main():
                 model.train()
             torch.cuda.empty_cache()
     if not args.smoke and not args.dry_run and not args.eval_only:
-        callbacks.append(EvalCallback(do_eval, int(kcfg["eval_every"]), at_start=not args.no_eval_at_start, dacc=float(tcfg.get("stop_dacc", 0.04)),
-                                      frozen_gap=frozen_gap, run_dir=run_dir))
+        eval_cb = EvalCallback(do_eval, int(kcfg["eval_every"]), at_start=not args.no_eval_at_start, dacc=float(tcfg.get("stop_dacc", 0.04)),
+                               frozen_direct=frozen_direct, run_dir=run_dir, arm=args.arm)
+        callbacks.append(eval_cb)
 
     trainer_kwargs = dict(model=model, processing_class=tok, reward_funcs=[reward], args=grpo, train_dataset=ds, callbacks=callbacks)
     _holder = {}
@@ -394,6 +402,9 @@ def main():
         log_md(f"dry-run {run_name}: {json.dumps(rep['summary'])}"); print(json.dumps(rep, indent=1)); return
     if not args.smoke:
         trainer.save_model(str(run_dir / "final"))
+        from cot_compress.stopping import designated_ckpt           # r3：指定 checkpoint（未收敛跑满 → step = max_steps）
+        dc = designated_ckpt(int(trainer.state.global_step), max_steps, eval_cb.stopped_converged, eval_cb.stopped_residual)
+        json.dump(dc, open(run_dir / "designated_ckpt.json", "w")); log_md(f"designated_ckpt {run_name}: {json.dumps(dc)}")
 
 if __name__ == "__main__":
     main()

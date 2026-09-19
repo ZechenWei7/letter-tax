@@ -15,13 +15,17 @@ def test_length_at_interpolates():
     c = [(100, 0.1), (200, 0.5), (300, 0.5)]
     assert E.length_at(c, 0.3) == pytest.approx(150) and E.length_at(c, 0.5) == 200 and E.length_at(c, 0.6) is None and E.length_at(c, 0.05) == 100
 
-def test_matched_accuracy_and_uncomputable():
-    cur = {"A": {1: [(100, 0.2), (300, 0.52), (400, 0.7)]}, "A2": {1: [(100, 0.1), (400, 0.6)]}, "B": {1: [(50, 0.3), (150, 0.58), (200, 0.65)]}}
+def test_matched_accuracy_r3_own_budget_mean_and_crossing():
+    cur = {"A": {1: [(100, 0.2), (400, 0.7)], 2: [(100, 0.3), (420, 0.8)]}, "A2": {1: [(100, 0.1), (400, 0.6)]}, "B": {1: [(50, 0.3), (200, 0.65)], 2: [(60, 0.2), (210, 0.50)]}}
     m = E.matched_accuracy(cur)
-    assert m["y_star"] == pytest.approx(0.55) and m["computable"]          # y* = 0.6 − 0.05；A 有 0.52、A2 有 0.6、B 有 0.58（均在 5pp 内）
-    cur["B"] = {1: [(50, 0.3), (200, 0.65)]}                               # B 没有点在 0.55 的 5pp 内 → 不可计算
-    m = E.matched_accuracy(cur)
-    assert not m["computable"] and "B" in m["reason"]
+    assert m["tops"] == {"A": pytest.approx(0.75), "A2": pytest.approx(0.6), "B": pytest.approx(0.575)}     # 各 seed 自身预算（x 最大点）处 acc 的等权均值
+    assert m["y_star"] == pytest.approx(0.525) and m["computable"] and m["non_crossing"]["B"] == [2]          # B seed 2 最高 0.50 < 0.525：不穿过，记下、不进税
+    assert set(E.tax_from_curves(cur)["per_seed"]) == {1}
+    none_cross = {"A": {1: [(100, 0.9)]}, "A2": {1: [(100, 0.9)]}, "B": {1: [(50, 0.1), (200, 0.2)], 2: [(50, 0.9), (200, 0.2)]}}
+    # 注意：曲线是 isotonic 后的；这里直接给单调曲线。B 均值 0.2 → y* = 0.15，B 两个 seed 都达到 → 可计算
+    assert E.matched_accuracy({k: ({s: E.monotone_curve(c) for s, c in v.items()}) for k, v in none_cross.items()})["computable"]
+    low = {"A": {1: [(100, 0.05), (400, 0.10)]}, "A2": {1: [(100, 0.9)]}, "B": {1: [(50, 0.9)]}}
+    m = E.matched_accuracy(low); assert m["y_star"] == pytest.approx(0.05) and m["computable"]                  # 曲线起点已 ≥ y* 也算达到
     assert not E.matched_accuracy({"A": {}, "A2": {1: []}, "B": {1: []}})["computable"]
 
 def test_mann_whitney_exact_and_tax():
@@ -73,15 +77,16 @@ def test_bootstrap_tax_paired_seed_blocks():
             "B": {1: _per_item(300, 0.75, 600, rng), 2: _per_item(300, 0.74, 620, rng), 3: _per_item(300, 0.76, 610, rng), 4: _per_item(300, 0.75, 600, rng)}}
     r = E.bootstrap_tax(runs, ids, n_boot=60)
     assert r["point"] is not None and 0.4 < r["point"] < 0.8 and r["lo"] < r["point"] < r["hi"] and set(r["per_seed"]) == {1, 2, 3}
-    assert r["tier"] in ("moderate", "strong") and r["skipped_frac"] < 0.5
+    assert r["tier_point"] in ("moderate", "strong") and r["skipped_frac"] < 0.5 and (r["tier"] is None or r["tier"] == r["tier_point"]) and r["tier_span"] is not None
     sc = {a: {s: 3.0 for s in sv} for a, sv in runs.items()}
     r2 = E.bootstrap_tax(runs, ids, n_boot=10, scale=sc)                      # 同比例换算不改税
     assert abs(r2["point"] - r["point"]) < 1e-9
-    cur = {"A": {1: [(100, 0.2), (400, 0.9)]}, "A2": {1: [(100, 0.5), (400, 0.6)]}, "B": {1: [(50, 0.3), (200, 0.55)]}}   # y*=0.5：A 无 5pp 内的点
-    assert E.tax_from_curves(cur) is None
+    assert E.tax_from_curves({"A": {1: [(100, 0.9)]}, "A2": {1: [(100, 0.9)]}}) is None                     # 缺臂 → 不可计算
 
 def test_tier_v8_and_zstd_units():
-    assert [E.tier_v8(x) for x in (0.7, 0.3, 0.15, 0.05, -0.2)] == ["strong", "moderate", "small", "none", "negative"]
+    assert [E.tier_v8(x) for x in (0.7, 0.67, 0.3, 0.25, 0.15, 0.10, 0.05, -0.05, -0.10, -0.2)] == ["strong", "strong", "moderate", "moderate", "small", "small", "none", "none", "negative", "negative"]
+    assert E.tier_interval(0.30, 0.60) == dict(tier="moderate", span="moderate", lo_tier="moderate", hi_tier="moderate")
+    assert E.tier_interval(0.20, 0.40)["tier"] is None and E.tier_interval(0.20, 0.40)["span"] == "small–moderate" and E.tier_interval(None, 0.4)["tier"] is None
     rng = random.Random(1)
     segs = {"A_1": [" ".join(rng.choice(["assume", "then", "so", "before", "after"]) for _ in range(60)) for _ in range(40)],
             "B_1": [" ".join(rng.choice(["»", "→", "⇒", "<", ">"]) for _ in range(30)) for _ in range(40)]}
