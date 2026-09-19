@@ -12,7 +12,7 @@
 
 ## 2. 实验设计 v8（2026-09-18 定稿；主任务 = 唯一线性序 + 析取先后约束）
 
-**预注册 commit hash：`<TBD — 全部单测通过后由用户提交并填入>`**（生成器、检测器、白名单、B_warm 映射、配置、seed 与划分报告一并进 git）。历史设计（v4 cups、v7 K&K）见 §10 与 git 历史；K&K 代码与测试保留，不在主线。
+**预注册 commit hash（freeze r3）：`fd5c6566df56b2ebc7cd47e30724be30484f3a83`**（r1 `eceff232`、r2 `288c874` 作废；本行由 r3 之后的单独 commit 填入，预注册引用 r3）（生成器、检测器、白名单、B_warm 映射、配置、seed 与划分报告一并进 git）。历史设计（v4 cups、v7 K&K）见 §10 与 git 历史；K&K 代码与测试保留，不在主线。
 
 ### 2.1 任务 `tasks/ordering.py`（键 `ord_n{n}_h{h}_d{d}`，候选格顺序 (8,4,5) (8,4,6) (9,5,6) (9,5,7)）
 划分数据 `data/ordering/<key>_seed0.json`（+ `.report.json`）已入 git（每格 ≤11 MB）；重建命令（确定性，seed 0）：`python scripts/ord_build_splits.py --key ord_n8_h4_d5 --seed 0 --workers 11`（其余三格同理；每格 1–8 min）。
@@ -184,7 +184,7 @@ E3（对 B 必需）：(i) B > C_rand 匹配长度（按题配对，seed 分块�
 
 ## 10. v7 协议摘要（历史：稀疏 Knights-and-Knaves；2026-09-18 被 v8 取代，代码与测试保留）
 
-**预注册 commit hash：`<TBD — 全部单测通过后由用户提交并填入>`**（生成器 tasks/kk.py、检测器 templates.py / strategy.py、白名单 vocab_mask.py + results/whitelist_extra_banned.json、B_warm 映射 warm.py + docs/warm_map.md、configs/*.yaml、data/kk/*.json 的 seed 与划分报告一并进 git。）
+预注册 commit hash：见 §2（freeze r3 `fd5c6566df56`）（生成器 tasks/kk.py、检测器 templates.py / strategy.py、白名单 vocab_mask.py + results/whitelist_extra_banned.json、B_warm 映射 warm.py + docs/warm_map.md、configs/*.yaml、data/kk/*.json 的 seed 与划分报告一并进 git。）
 
 | 模块 | 文件 | 要点 |
 |---|---|---|
