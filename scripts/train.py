@@ -166,7 +166,10 @@ def main():
 
     # ---- M ----
     adm_path = ROOT / f"results/admission_{key}.json"
-    if key.startswith("ord_"):            # r3：M = 准入 500 条原生轨迹的中位长度（results/admission_<key>.json["M"]），不再用 M.json 的 32 题
+    if rcfg.get("m_override"):            # D8：只用于吞吐测量（--dry-run）的临时 M；正式 run 的 M 必须来自该 cap 下的准入
+        M = float(rcfg["m_override"]); log_md(f"TEMPORARY M override = {M} (throughput measurement only; not a result)")
+        assert args.dry_run or args.smoke, "reward.m_override is only allowed with --dry-run / --smoke"
+    elif key.startswith("ord_"):            # r3：M = 准入 500 条原生轨迹的中位长度（results/admission_<key>.json["M"]），不再用 M.json 的 32 题
         assert adm_path.exists(), f"{adm_path} missing: run 01_calibrate.py --admission --keys {key} first (M comes from the 500 admission trajectories)"
         M = float(json.load(open(adm_path))["M"])
     else:

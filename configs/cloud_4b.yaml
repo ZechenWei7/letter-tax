@@ -14,7 +14,7 @@ model:
   use_unsloth: false         # TRL 原生路径（见上）；true = 本地同款 Unsloth 路径（无 vLLM）
   load_in_4bit: false
   fast_inference: false      # 不用 Unsloth 自带 vLLM；vLLM 由 TRL colocate 管理（train.use_vllm）
-  max_seq_length: 6144       # prompt(≤512) + cap 5120 + 答案区
+  max_seq_length: 11264      # D8：prompt(≤512) + cap 10240 + 答案区（原 6144 = 512 + 5120 + 余量）
   dtype: bfloat16
 task:
   key: ord_n8_h4_d5          # v8 主任务：唯一线性序 + 析取（ordering）；候选格顺序 (8,4,5) (8,4,6) (9,5,6) (9,5,7)，先格统计预筛再准入；kk / cups 退出主线
@@ -28,12 +28,12 @@ generation:
   batch_size: 64
   eval_batch_size: 64
   max_new_tokens_direct: 32  # D6（2026-09-19）：ordering 的直接作答要 18（n=8）/ 20（n=9）个 token（数字与空格各占一个 token + </answer> 3 个）；继承来的 16 会在 </answer> 前截断 → direct 恒为 0
-  max_new_tokens_think: 5120 # = train.max_completion_length（cap 3072 是本地 8GB 遗留；云端 4096 → 5120：cups_n8_k20 在 5120 下强制收尾 11.8%，2026-09-17）
+  max_new_tokens_think: 10240 # D8（2026-09-19）：cap 5120 → 10240（(8,4,5)/(8,4,6) 在 5120 下强制收尾 91.6% / 94.2%；8192 下仍 57%）。旧注： = train.max_completion_length（cap 3072 是本地 8GB 遗留；云端 4096 → 5120：cups_n8_k20 在 5120 下强制收尾 11.8%，2026-09-17）
 train:
   num_generations: 16
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 32    # 1 × 32 = 32 条 / 步 = 2 个 prompt × G=16；smoke A 在 micro-batch 2 时训练峰值 73.9 GiB / reserved 78.4（几乎 OOM）→ 改 1
-  max_completion_length: 5120        # 云端默认 cap（eval 与训练都用）；TRL 的 vLLM max_model_len = 512 + 5120
+  max_completion_length: 10240       # D8：云端 cap（eval 与训练都用）；TRL 的 vLLM max_model_len = 512 + 10240
   learning_rate: 1.0e-5
   warmup_steps: 10                   # v7：10 步 warmup（constant_with_warmup）
   stop_dacc: 0.04                    # 停止判据 Δacc < 4pp

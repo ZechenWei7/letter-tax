@@ -8,7 +8,7 @@ metrics 由 01_calibrate.py --admission 在 stopping-eval 500 题（split="stop"
   1 直接作答 exact ≤ 2 × 2^−d（在 direct-check 2000 题上测；准入用严格抽取，宽松并报；1/#LE(hard) 只报）
   2 原生 exact ∈ [60%, 80%]（S≥1 总体）
   3 强制预算曲线到 native−5pp 的最小预算 ≥ 0.5·M（没有点到 → 通过）
-  4 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 曲线 10pp 内
+  4 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 曲线 10pp 内（D10：只在该预算点 native > chance + 10pp 时比较；否则两者都≈0，"10pp 内"空成立）
   5 原生轨迹移植 i→j 使准确率向 direct 掉一半以上：native − transplant ≥ (native − direct)/2；配对 = **随机错位**（derangement：均匀随机置换、无不动点，见 derangement()）
   6 冻结 letter-ban ≤ direct + 10pp
   7 捷径检测器命中 < 5%
@@ -47,7 +47,7 @@ def admission_decision(m: dict, native_lo: float = 0.60, native_hi: float = 0.80
     min_budget = reached[0] if reached else None
     checks["3_min_budget_ge_0.5M"] = dict(ok=(min_budget is None or min_budget >= 0.5), min_budget_frac=(min_budget if min_budget is not None else ">1.0"), target=thr)
     fc = {float(k): v for k, v in m.get("filler_curve", {}).items()}
-    comparable = sorted(f for f in fc if f >= 0.5 and f in bc)
+    comparable = sorted(f for f in fc if f >= 0.5 and f in bc and bc[f] > chance + 0.10)      # D10：只比 native > chance+10pp 的预算点
     bad = [f for f in comparable if fc[f] >= bc[f] - 0.10]
     checks["4_filler_not_within_10pp"] = dict(ok=not bad, offending_fracs=bad, compared_fracs=comparable)
     drop = native - m["transplant_acc"]; need = (native - direct) * 0.5

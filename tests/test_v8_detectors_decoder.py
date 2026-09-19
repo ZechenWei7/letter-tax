@@ -19,10 +19,16 @@ def test_shortcut_detectors():
     assert SC.detect_shortcuts("0<1 2<3 restated; hence 0 1 2 3", IR, n, d) == []        # 只复述硬约束不算抄写
     assert SC.detect_shortcuts("try both sides; try both again", IR, n, d) == ["assign_enum"]
     gv = "guess 0 1 2 3 check ok;\nguess 2 3 0 1 check fails;\nguess 0 2 1 3 verify fails"
-    assert SC.detect_shortcuts(gv, IR, n, d) == ["guess_verify"]
+    assert SC.detect_shortcuts(gv, IR, n, d) == ["guess_verify"]                       # 三个不同候选、之间无推理标记
+    restate = "The order is 0 1 2 3. check ok.\nLet me verify: 0 1 2 3 holds.\nFinal: 0 1 2 3 valid."
+    assert SC.detect_shortcuts(restate, IR, n, d) == []                               # D9：同一顺序的重述 / 复核不算
+    reasoned = "try 2 3 0 1 check fails.\nSo 3<0 is impossible, therefore 1<2; then 0 1 2 3 check ok.\nSince that holds, if we swap we get 0 2 1 3 check fails."
+    assert SC.detect_shortcuts(reasoned, IR, n, d) == []                              # D9：换候选之间有传播 / 分情况标记
+    assert SC.detect_shortcuts(restate, IR, n, d, legacy_gv=True) == ["guess_verify"]   # 原定义并报用
+    assert SC.reasoning_markers("so then » x") == 3 and SC.reasoning_markers("plain text 0 1 2") == 0
     natural = "Suppose 3<0. Then 2<3<0<1, so 0<2 is false and 1<3 is false: contradiction. Hence 1<2, giving 0<1<2<3."
     assert SC.detect_shortcuts(natural, IR, n, d) == []
-    assert SC.shortcut_rate([natural, gv], [IR, IR], n, d)["any"] == 0.5
+    assert SC.shortcut_rate([natural, gv, restate], [IR, IR, IR], n, d)["any"] == pytest.approx(1 / 3)
 
 def test_strategy_classes():
     n, S = 4, 1

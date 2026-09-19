@@ -46,10 +46,15 @@ def test_derangement_has_no_fixed_points_and_is_a_permutation():
         p = derangement(n, rng); assert sorted(p) == list(range(n)) and all(p[i] != i for i in range(n))
     assert derangement(500, random.Random(1)) == derangement(500, random.Random(1))
 
-def test_filler_literal_at_half_M():
+def test_filler_only_compared_where_native_above_chance_plus_10pp():
+    """D10：native 在 0.5M 处 ≈ chance 时该点不比较（否则填充≈0 与 native≈0 "10pp 内" 空成立）。"""
     m = base(); m["budget_curve"] = {"0.5": 0.05, "1.0": 0.68}; m["filler_curve"] = {"0.5": 0.05, "1.0": 0.06}
     d = admission_decision(m)
-    assert d["checks"]["4_filler_not_within_10pp"]["compared_fracs"] == [0.5, 1.0] and not d["admitted"]
+    assert d["checks"]["4_filler_not_within_10pp"]["compared_fracs"] == [1.0] and d["admitted"]
+    m["filler_curve"]["1.0"] = 0.60
+    assert not admission_decision(m)["admitted"]
+    m = base(); m["budget_curve"] = {"0.5": 0.1005, "1.0": 0.68}; m["filler_curve"] = {"0.5": 0.05, "1.0": 0.06}     # chance 1/1680：0.1005 ≤ chance+0.10 → 不比
+    assert admission_decision(m)["checks"]["4_filler_not_within_10pp"]["compared_fracs"] == [1.0]
 
 def test_post_training_and_cell_order():
     assert post_training_check(0.11, 0.02)["ok"] and not post_training_check(0.13, 0.02)["ok"]
