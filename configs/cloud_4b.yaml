@@ -53,5 +53,5 @@ train:
   crand_source: null                 # 臂 C_rand：runs/<B run>（取收敛轨迹的长度分布与 unigram）
 cost:
   usd_per_hour: 1.9                  # A100 80GB 现价（--dry-run 投影用）
-  budget_usd: null                   # 总预算（美元）；设了之后 run_matrix 在 B_warm-RL 前按投影检查，超则不跑；null = 只记录投影
+  budget_usd: 300                    # 总预算（美元，预注册写死）；run_matrix 在 B_warm-RL 前按投影检查，超预算 → B_warm-RL 跳过并记 "search-budget result"
   eval_min_per_eval: 5.0             # 每次 eval（500 题 vLLM）约 5 min，计入投影

@@ -61,7 +61,7 @@ def test_analyze_e1_e2_e3(synth_runs):
     assert E1["matched"]["computable"] and E1["matched"]["y_star"] == pytest.approx(min((0.80 + 0.78 + 0.79) / 3, (0.76 + 0.77) / 2, (0.75 + 0.74 + 0.76) / 3) - 0.05)   # r3：各臂 seed 均值取 min − 5pp
     tk = E1["tax"]["tokens"]
     assert set(tk["per_seed"]) <= {1, 2, 3} and tk["tier_point"] in ("moderate", "strong") and 0.4 < tk["point"] < 0.8 and tk["lo"] <= tk["point"] <= tk["hi"]
-    assert set(E1["tier_spans"]) == set(E1["tax"])
+    assert set(E1["tier_spans"]) == set(E1["tax"]) == set(E1["tier_points"]) and E1["tier_points"]["tokens"] == tk["tier_point"] and len(E1["claim"]["point_tiers"]) == 3
     assert E1["mann_whitney_sensitivity"]["p"] == pytest.approx(0.05)
     for u in ("code_points", "zstd_bits_union_dict", "zstd_bits_own_dict"): assert E1["tax"][u]["point"] is not None
     assert E1["claim"]["same_tier_all_units"] in (True, False) and set(E1["no_match_table"]) == {"A", "A2", "B"}
@@ -104,5 +104,5 @@ def test_run_matrix_prune_gate_retune(tmp_path):
     mx = yaml.safe_load(open("configs/matrix_core.yaml"))["runs"]; order = [(r["arm"], int(r["seed"])) for r in mx]
     assert order.index(("Bwarm_sft", 1)) == order.index(("A", 1)) + 1 and order.index(("Bwarm_sft", 2)) == order.index(("A", 2)) + 1 and order.index(("Bwarm_sft", 3)) == order.index(("A", 3)) + 1
     assert all(r.get("set") == ["train.crand_source=auto"] for r in mx if r["arm"] == "Crand")                  # C_rand seed i 绑 B seed i
-    bp = rm.budget_projection("configs/cloud_4b.yaml", 2); assert bp["ok"] is None and bp["n_extra_runs"] == 2   # 未设预算 → 只记录
+    bp = rm.budget_projection("configs/cloud_4b.yaml", 2); assert bp["budget_usd"] == 300 and bp["n_extra_runs"] == 2 and bp["ok"] in (None, True)   # 本地无 dry-run 投影 → None
     assert [x["tag"] for x in rm.RETUNE] == ["_lam0.3", "_lam1.0", "_G32"] and rm.run_name(dict(arm="Bwarm_sft", key="kk_n10_s1", seed=1)) == "Bwarm_sft_kk_n10_s1_s1"

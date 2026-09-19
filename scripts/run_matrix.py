@@ -55,7 +55,7 @@ def warm_decision(key, lam, thr=0.15):
 
 def budget_projection(cfg_path, n_extra_runs: int) -> dict:
     """B_warm-RL 前的预算检查：已花 GPU 小时（各 run steps.jsonl 的 sec 之和）+ n_extra_runs × 每 run 投影小时（results/dry_run_*.json），
-    × cost.usd_per_hour，对比 cost.budget_usd（未设 → ok=None，只记录投影）。超预算 → 不跑 B_warm-RL。"""
+    × cost.usd_per_hour，对比 cost.budget_usd（预注册写死 300；未设 → ok=None，只记录投影）。超预算 → 不跑 B_warm-RL，记 "search-budget result"（results/search_budget_<key>.json）。"""
     from cot_compress.config import load_config
     cfg = load_config(cfg_path); cost = cfg.get("cost", {}) or {}
     usd_h = float(cost.get("usd_per_hour", 1.9)); budget = cost.get("budget_usd")
@@ -171,7 +171,10 @@ def main():
             with open(log, "a") as f: f.write(f"- budget projection before {run_name(r)}: {json.dumps(bp)}\n")
             print(f"[budget] {json.dumps(bp)}", flush=True)
             if bp["ok"] is False:
-                print(f"[skip] {run_name(r)}: projected spend exceeds cost.budget_usd — B_warm-RL not run", flush=True); continue
+                rec = dict(label="search-budget result", run=run_name(r), reason="projected spend exceeds cost.budget_usd; B_warm-RL skipped", projection=bp, cold_start=best)
+                json.dump(rec, open(ROOT / f"results/search_budget_{r['key']}.json", "w"), indent=1)
+                with open(log, "a") as f: f.write(f"- search-budget result: {json.dumps(rec)}\n")
+                print(f"[skip] {run_name(r)}: search-budget result — projected spend exceeds cost.budget_usd, B_warm-RL not run", flush=True); continue
         name = run_name(r); rd = ROOT / "runs" / name
         tag = f"_{r['key']}_s{int(r['seed'])}{r.get('tag', '')}"
         sets = [f"reward.lambda={float(r['lam'])}", f"task.key={r['key']}", f"train.seed={int(r['seed'])}",

@@ -3,7 +3,7 @@ E1  每个收敛策略的强制预算曲线（自身收敛长度 0.1…1.0 倍�
     匹配 y* = min_臂（该臂各 seed 自身收敛预算处 isotonic acc 的等权均值）− 5pp，臂 ∈ {A, A″, B}；任一臂曲线不穿过 y* → "E1 不可计算"，输出无匹配表。
     税 = (L_A − L_B)/L_A：按题配对 bootstrap（同一份重采样用于所有臂 / seed，seed 等权分块，200 次）；seed 级精确单边 Mann-Whitney 作敏感性表。
     三单位：token / code point / zstd-19 bits（并集字典 + 各臂字典）。档位区间化：[67,∞) strong / [25,67) moderate / [10,25) small / (−10,10) none / (−∞,−10] negative；
-    每个单位的 bootstrap 区间两端同档才给档（跨档只报 span），三单位同档才声称。臂间训练后直接作答差 > 3pp → 标 "not comparable"。
+    每个单位的 bootstrap 区间两端同档才给档（跨档只报 span），三单位同档才声称；点估计所在档（tier_point）并报。臂间训练后直接作答差 > 3pp → 标 "not comparable"。
     附（纯描述，不参与任何判定或读法）：冻结→A 压缩量；A 主流策略类内的税；L 对两个下限（决策 / Kahn，c=2.5）的比；按题匹配长度；A 字母占比曲线（低 = <30%）。
 E2  B_warm-SFT 总准确率在源 A 5pp 内才有效，长度比 = 编码税，按 A seed 报；否则"词承载结构或映射有损"。
 E3（对 B 必需）(i) B > C_rand（C_rand seed i 绑 B seed i；按题配对、seed 分块 bootstrap）；(ii) 移植与 unigram 重采样各使 B 准确率向训练后 direct 掉一半以上；(iii) 复制率 < 30%；
@@ -121,9 +121,10 @@ def analyze(runs, key, copy_thr=0.3, decoder=None, frozen_direct=None):
             E1["mann_whitney_sensitivity"] = mann_whitney_exact([v for v in Lt["B"].values() if v], [v for v in Lt["A"].values() if v], "less")
         tiers = {u: t.get("tier") for u, t in tax.items()}; spans = {u: t.get("tier_span") for u, t in tax.items()}
         E1["tax"] = tax; E1["tiers"] = tiers; E1["tier_spans"] = spans
+        E1["tier_points"] = {u: t.get("tier_point") for u, t in tax.items()}                      # r4：点估计所在档并报（声称仍按区间两端同档）
         three = [tiers.get(u) for u in ("tokens", "code_points", "zstd_bits_union_dict")]
         same = all(x is not None for x in three) and len(set(three)) == 1                     # 区间化：每个单位的 bootstrap 区间两端同档，且三单位同档
-        E1["claim"] = dict(same_tier_all_units=same, tier=(three[0] if same else None))
+        E1["claim"] = dict(same_tier_all_units=same, tier=(three[0] if same else None), point_tiers=[tax[u].get("tier_point") for u in ("tokens", "code_points", "zstd_bits_union_dict")])
     else:
         E1["verdict"] = "E1 不可计算：" + str(ma.get("reason"))
     if not R["direct_comparable_le_3pp"]["ok"]: E1["comparability"] = "not comparable"

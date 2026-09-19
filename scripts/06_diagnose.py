@@ -1,7 +1,7 @@
 """内容诊断 v7，对 A、A″、B、Bwarm、C_rand 跑（kk：预算用 stopping-eval 定、报告用 reporting-eval；两者不混）：
   端点：训练后策略的 native (L, acc)、direct 准确率、强制预算曲线 {0.1,0.2,…,1.0}×自身收敛长度（每点：acc、外化准确率 acc−direct、正确轨迹 token 数均值）
   kk 附加：策略类分布、模板命中率、字母占比、命中率（exact / Hamming≤2）、每题 L（按题匹配的次要长度用）
-  诊断：2 轨迹移植 i→j；3 自身轨迹 unigram 重采样；4 自身轨迹填充替换（白名单 unigram）；5 前缀评分（cups：0.25/0.5/0.75 截断 + 强制，
+  诊断：2 轨迹移植 i→j（随机错位 derangement，与准入第 5 条一致）；3 自身轨迹 unigram 重采样；4 自身轨迹填充替换（白名单 unigram）；5 前缀评分（cups：0.25/0.5/0.75 截断 + 强制，
         与各操作前缀后的真实状态比对 → 峰值位置）；6 反事实状态编辑（B 记法解析器尝试，失败 → not applicable）
   描述量：禁集占比、唯一 token 率、组内 n-gram 多样性、强制收尾模板复制率、提示词复制率、zstd 比、0.6B-Base PPL、
         长度三单位（token / code point / 自适应 5-gram 比特）
@@ -197,7 +197,9 @@ def main():
     D["budget_base_L"] = L_sel
     # ---- 诊断 2–4（测试集；填充 / 重采样的统计来自自身轨迹）----
     st = TrajStats(tok, rows, lid)
-    th2 = [st.sample_transplant(it["id"], len(st.by_item[it["id"]][0]) if st.by_item.get(it["id"]) else None, rng) for it in test]
+    from cot_compress.admission import derangement                       # r4：E3 (ii) 移植 = 随机错位配对（与准入第 5 条一致；"长度最接近"会偏向相似题）
+    pi = derangement(len(test), rng); D["diag2_pairing"] = "derangement"
+    th2 = [st.by_item[test[pi[i]]["id"]][0] for i in range(len(test))]
     r2 = prefilled_answer_eval(model, tok, key, test, th2, gen, seed=args.test_seed, batch_size=gen["batch_size"], tag="transplant"); D["diag2_transplant_acc"] = summarize(r2)["acc"]; _save(run_dir, "transplant", r2)
     th3 = [st.sample_unigram(len(st.by_item[it["id"]][0]) if st.by_item.get(it["id"]) else int(Lc), rng) for it in test]
     r3 = prefilled_answer_eval(model, tok, key, test, th3, gen, seed=args.test_seed, batch_size=gen["batch_size"], tag="unigram"); D["diag3_unigram_resample_acc"] = summarize(r3)["acc"]; _save(run_dir, "unigram", r3)

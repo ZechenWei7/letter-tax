@@ -13,6 +13,11 @@
 | 9 | 测试 | 见各行；沿用 mask / logprob / C_rand / B_warm / 奖励穷举 | `python -m pytest tests -q`：94 通过、2 跳过（opt-in 10k），7.3 min；ORD_FULL 10k 通过 |
 | 10 | 文档 | README §2 v8 + 预注册 hash 占位；本文件；`scripts/13_instrument_control.py` 改用排序题（英文 152 token / 符号 84 / warm 107；比 0.55 / 0.70；无捷径命中）→ `results/instrument_control.json`（K&K 版存 `_kk.json`） | 脚本已运行 |
 
+## r4 冻结补丁（2026-09-19；r3 `fd5c656` 作废）
+1. `configs/cloud_4b.yaml` `cost.budget_usd: 300` 写死；超预算 → B_warm-RL 跳过并记 "search-budget result"（`results/search_budget_<key>.json` + matrix_log）。
+2. `06_diagnose.py` 诊断 2（E3 (ii) 移植）改为随机错位配对 `admission.derangement`，与准入第 5 条一致（r3 注里的不一致已消除）。
+3. 档位：区间两端定档保留；另报点估计所在档（`E1.tier_points`、`claim.point_tiers`），不用于声称。
+
 ## r3 冻结修订（2026-09-19；r2 `288c874` 作废）
 | # | 修订 | 文件 | 测试 |
 |---|---|---|---|
