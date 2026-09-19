@@ -125,11 +125,18 @@ def first_run_gate(run_dir: pathlib.Path, min_reduction=0.30, max_acc_loss=0.05,
                 kahn_lb_c2_5=oracle_lb, decision_lb_c2_5=kill_lb, L_median_final=e1["L_median"], above_2x_kahn=above_oracle,
                 arm0=dict(L=e0["L_mean"], acc=e0["acc"]), final=dict(step=e1["step"], L=e1["L_mean"], acc=e1["acc"]))
 
+def halt(log, why):
+    """--strict：停矩阵并留痕（results/matrix_halt.json + matrix_log.md），exit 4。"""
+    json.dump(dict(time=time.strftime("%Y-%m-%d %H:%M"), reason=why), open(ROOT / "results/matrix_halt.json", "w"), indent=1)
+    with open(log, "a") as f: f.write(f"- {time.strftime('%Y-%m-%d %H:%M')} HALT (--strict): {why}\n")
+    print(f"[strict] HALT: {why}", flush=True); sys.exit(4)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--matrix", required=True); ap.add_argument("--config"); ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-runs", type=int); ap.add_argument("--post-cmd", default=""); ap.add_argument("--diag-n", type=int, default=500)
     ap.add_argument("--skip-gate", action="store_true"); ap.add_argument("--key", help="覆盖矩阵所有 run 的格（准入通过的格）")
+    ap.add_argument("--strict", action="store_true", help="D14：任何门失败（操纵门 / kill）、任何子进程非零退出、残留检查触发（uninterpretable.json）都立刻停下（exit 4），不自动重调")
     args = ap.parse_args()
     m = yaml.safe_load(open(args.matrix)); d = m.get("defaults", {}); runs = prune(m["runs"], args.max_runs)
     if args.key:
@@ -148,6 +155,7 @@ def main():
                 print(f"[skip] {name}: final exists"); continue
             src = (f"A_{float(d.get('lam', 0.5))}_{r['key']}_s{int(r['seed'])}" if r.get("source") == "A_seed" else best_A_run(r["key"], float(d.get("lam", 0.5))))
             if not (ROOT / "runs" / src / "final").exists():
+                if args.strict and not args.dry_run: halt(log, f"{name}: source A run {src} has no final/")
                 print(f"[skip] {name}: source A run {src} not finished"); continue
             sft = [sys.executable, "scripts/11_sft_warm.py", "--config", cfg, "--src", f"runs/{src}", "--tag", f"{r['key']}_s{int(r['seed'])}{r.get('tag', '')}"]
             ev = [sys.executable, "scripts/train.py", "--config", cfg, "--arm", "Bwarm", "--eval-only", "--tag", f"_{r['key']}_s{int(r['seed'])}_sft",
@@ -159,6 +167,7 @@ def main():
                 diag = [sys.executable, "scripts/06_diagnose.py", "--run", f"runs/{ev_run}", "--config", cfg, "--n", str(args.diag_n), "--key", r["key"], "--backend", "vllm"]
                 rc3 = subprocess.call(diag, cwd=ROOT) if rc2 == 0 else None
                 with open(log, "a") as f: f.write(f"- {time.strftime('%Y-%m-%d %H:%M')} {name}: sft_rc={rc} evalonly_rc={rc2} diag_rc={rc3}\n")
+                if args.strict and (rc != 0 or rc2 != 0 or rc3 != 0): halt(log, f"{name}: sft_rc={rc} evalonly_rc={rc2} diag_rc={rc3}")
                 if rc != 0: print(f"[fail] {name}"); return
             continue
         if r.get("conditional") == "cold_start_failure" and not args.dry_run:
@@ -205,6 +214,8 @@ def main():
                     f.write(f"- {time.strftime('%Y-%m-%d %H:%M')} {name}: train_rc={rc} diag_rc={rc2} {(time.time()-t0)/3600:.1f} h\n")
                 if args.post_cmd:
                     subprocess.call(args.post_cmd.replace("{run}", name), shell=True, cwd=ROOT)
+                if args.strict and (rc != 0 or rc2 != 0): halt(log, f"{name}: train_rc={rc} diag_rc={rc2}")
+                if args.strict and (rd / "uninterpretable.json").exists(): halt(log, f"{name}: residual check triggered (uninterpretable.json)")
                 if rc != 0:
                     print(f"[fail] {name} rc={rc}; stopping matrix (re-run to resume)", flush=True); return
                 if r.get("warm_check"):
@@ -217,6 +228,7 @@ def main():
             with open(log, "a") as f:
                 f.write(f"- first-run gate {name}: {json.dumps(g)}\n")
             print(f"[gate] {json.dumps(g)}", flush=True)
+            if args.strict and (g.get("kill") or not g["ok"]): halt(log, f"first-run gate {name}: kill={g.get('kill')} ok={g['ok']} {json.dumps(g)}")
             if g.get("kill"):
                 print("[gate] KILL: converged L_median <= 1.5 × median decision_lb_tokens[2.5] — matrix stopped for review (no retune)", flush=True); return
             if not g["ok"]:
