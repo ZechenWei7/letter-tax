@@ -38,7 +38,7 @@ train:
   stop_dacc: 0.04                    # 停止判据 Δacc < 4pp
   lora_r: 32
   lora_alpha: 64
-  lora_embed_lm_head: auto           # v7：+ embed_tokens（lm_head 不挂：tied embeddings）；auto = 按 results/lora_embed_sync_check.json 的 q+embed 门控（不通过则全臂去掉并记日志）
+  lora_embed_lm_head: false          # D5（2026-09-19）：GPU 验证未通过 → 全臂去掉 embed_tokens LoRA（LoRA = attention + MLP）。tied embeddings 下 merge→同步会把 embed 的增量带进采样端的输出头，训练端未合并前向没有：采样端 vs 训练端 mean|Δlogp| 0.186（对照 0.031，噪声底 0.035）。见 docs/deviations_log.md D5、results/lora_embed_sync_check.json
   dry_run_steps: 20
   matrix_for_projection: configs/matrix_core.yaml
   gradient_checkpointing: true       # HF 原生梯度检查点（TRL 路径）
