@@ -249,8 +249,8 @@ def run_admission(args):
             from collections import Counter
             pk = task.parse_key(key)
             _sr = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"]); template_rate = _sr["any"]
-            _sr_legacy = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"], legacy_gv=True)     # D9：原定义并报
-            print(f"  shortcut by type (D9 def C): {_sr['by_type']} | legacy r4 definition: any={_sr_legacy['any']:.3f} {_sr_legacy['by_type']}", flush=True)
+            _sr_legacy = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"], legacy_gv=True, legacy_pe=True)     # D9 / D12：r4 原定义并报
+            print(f"  shortcut by type (D9 def C + D12): {_sr['by_type']} | legacy r4 definition: any={_sr_legacy['any']:.3f} {_sr_legacy['by_type']}", flush=True)
             oracle_lb = {c: float(statistics.median(it["meta"]["kahn_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}     # 第 8 条用 Kahn 下限
             decision_lb = {c: float(statistics.median(it["meta"]["decision_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}
             pw = [task.pairwise_accuracy([int(x) for x in r["pred"].split()], it["meta"]["sigma"]) for r, it in zip(d_rows, d_items) if r.get("pred")]

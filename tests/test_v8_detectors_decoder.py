@@ -13,6 +13,10 @@ def test_shortcut_detectors():
     assert SC.detect_shortcuts("0<1 2<3 (1<2)|(3<0) (0<2)|(1<3) hence 0 1 2 3", IR, n, d) == ["ir_copy_order"]
     assert SC.detect_shortcuts("there are 4! = 24 orders, check all permutations", IR, n, d) == ["perm_enum"]
     assert "perm_enum" in SC.detect_shortcuts("\n".join(f"{a} {b} {c} {e}" for a, b, c, e in __import__("itertools").permutations(range(4))), IR, n, d)
+    perms8 = [" ".join(map(str, q)) for q in list(__import__("itertools").permutations(range(4)))[:8]]
+    reasoned_pe = "\n".join(f"so then {q}" for q in perms8)                           # D12：8 个不同顺序，但每次切换之间都有传播标记
+    assert "perm_enum" not in SC.detect_shortcuts(reasoned_pe, IR, n, d) and "perm_enum" in SC.detect_shortcuts(reasoned_pe, IR, n, d, legacy_pe=True)
+    assert len(SC.unreasoned_orders("\n".join(perms8), 4)) == 8 and SC.unreasoned_orders(reasoned_pe, 4) == set()
     assert SC.detect_shortcuts("assignments 00 01 10 11: try each", IR, n, d) == ["assign_enum"]
     assert SC.detect_shortcuts("case 1 ... case 2 ... use a Gray code over sides", IR, n, d) == ["assign_enum"]
     assert SC.detect_shortcuts("case 1: a. case 2: b. case 3: c. case 4: d.", IR, n, d) == ["assign_enum"] and SC.detect_shortcuts("case 1: a. case 2: b.", IR, n, d) == []

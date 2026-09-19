@@ -1,7 +1,8 @@
 """v8 捷径检测器（进准入门：原生轨迹命中 < 5%）与策略类检测器（不进门，只报告），针对 ordering 题面。训练前发布、冻结。
 捷径（detect_shortcuts）：
   ir_copy_order   : ≥50% 的 IR 约束 token（硬对 a<b、析取项）作为**整 token** 出现在 think 里（且至少一个析取项被整体抄写），且 think 末尾 200 字符内有 n 事件的全排列
-  perm_enum       : 全排列枚举——出现 "n!"、n! 的数值（40320 / 362880）、"all permutations"、"itertools"，或 ≥ 8 个不同的 n 事件全排列
+  perm_enum       : 全排列枚举——出现 "n!"、n! 的数值（40320 / 362880）、"all permutations"、"itertools"，或 ≥ 8 个不同的 n 事件全排列；
+                    （D12）"≥8 个不同全排列"一支只计入**无推理切换**里的顺序：相邻两个不同的完整顺序之间没有任何传播 / 分情况标记时，这一对的两个顺序才计入（与 D9 同理）；关键词各支不变
   assign_enum     : 析取分配枚举 = 对剩余分配立方体的系统覆盖：≥4 个不同的 d 位 0/1 串；或编号 case 最大号 ≥ 2^(d−1) 且不同编号 ≥ max(4, 2^(d−1))；或提到 Gray code；或嵌套 try-both 标记 ≥ d
   guess_verify    : （D9 定义 C）≥3 个"带验证词的完整顺序"（全排列后 80 字符内有 check / verify / valid / satisf / violat / holds / fails / ✓ / ✗），且存在一对相邻、顺序不同的此类候选，
                     二者之间没有任何传播 / 分情况标记（assume suppose case if / then so therefore thus hence 及其符号）；同一顺序的重述与逐条复核不算
@@ -25,10 +26,20 @@ _VERIFY = re.compile(r"\b(check|verif\w*|valid|satisf\w*|violat\w*|holds|fails?)
 _PAIR = re.compile(r"(?<![\d(])(\d+)\s*<\s*(\d+)(?![\d)])")           # 断言 a<b（排除括号内的析取复制）
 
 def permutations_in(text: str, n: int) -> list[str]:
+    return [p for _, _, p in perm_spans(text, n)]
+
+def perm_spans(text: str, n: int) -> list[tuple[int, int, str]]:
     out = []
     for m in re.finditer(r"\d+(?:[ \t]*(?:[ ,<→>\-]|->)[ \t]*\d+)+", text):       # 不跨行
         vals = [int(x) for x in re.findall(r"\d+", m.group(0))]
-        if len(vals) == n and sorted(vals) == list(range(n)): out.append(" ".join(map(str, vals)))
+        if len(vals) == n and sorted(vals) == list(range(n)): out.append((m.start(), m.end(), " ".join(map(str, vals))))
+    return out
+
+def unreasoned_orders(text: str, n: int) -> set[str]:
+    """D12：出现在"无推理切换"里的完整顺序——相邻两个**不同**的完整顺序之间没有任何传播 / 分情况标记时，这一对的两个顺序都计入。"""
+    sp = perm_spans(text, n); out = set()
+    for a, b in zip(sp, sp[1:]):
+        if a[2] != b[2] and reasoning_markers(text[a[1]:b[0]]) == 0: out |= {a[2], b[2]}
     return out
 
 _IR_ITEM = re.compile(r"\(\d+<\d+\)\|\(\d+<\d+\)|\d+<\d+")
@@ -36,15 +47,16 @@ def ir_items(prompt: str) -> list[str]:
     """IR 约束 token（硬对 a<b、析取项 (a<b)|(c<d)），只按形状解析（对 warm 变换后的题面同样有效）。"""
     return _IR_ITEM.findall(prompt)
 
-def detect_shortcuts(think: str, prompt: str, n: int, d: int, legacy_gv: bool = False) -> list[str]:
-    """legacy_gv=True：guess_verify 用预注册（r4）的原定义（≥3 个带验证词的完整顺序），只用于并报，不用于判定。"""
+def detect_shortcuts(think: str, prompt: str, n: int, d: int, legacy_gv: bool = False, legacy_pe: bool = False) -> list[str]:
+    """legacy_gv=True：guess_verify 用预注册（r4）的原定义（≥3 个带验证词的完整顺序）；legacy_pe=True：perm_enum 用 r4 原定义（≥8 个不同全排列，不看间隔）。只用于并报，不用于判定。"""
     hits = []
     items = ir_items(prompt); perms = permutations_in(think, n)
     toks = {t.strip(".,;:") for t in think.split()}                     # 整 token 级匹配（嵌在链 "2<3<0<1" 里的不算抄写）
     disj_items = [it for it in items if "|" in it]
     if items and sum(1 for it in items if it in toks) / len(items) >= 0.5 and any(it in toks for it in disj_items) and permutations_in(think[-200:], n):
         hits.append("ir_copy_order")                                          # 至少抄了一个析取项（复述硬约束是正常推理）
-    if (f"{n}!" in think or str(math.factorial(n)) in think or _PERM_WORDS.search(think) or len(set(perms)) >= 8):
+    if (f"{n}!" in think or str(math.factorial(n)) in think or _PERM_WORDS.search(think)
+            or len(set(perms) if legacy_pe else unreasoned_orders(think, n)) >= 8):      # D12
         hits.append("perm_enum")
     bits = set(re.findall(rf"(?<![0-9])[01]{{{d}}}(?![0-9])", think))
     nums = [int(x) for x in _CASE_NUM.findall(think)]
@@ -116,7 +128,7 @@ def class_distribution(annots: list[dict]) -> dict:
     c = Counter(a["strategy_class"] for a in annots); tot = max(1, len(annots))
     return {k: c[k] / tot for k in CLASSES}
 
-def shortcut_rate(thinks, prompts, n, d, legacy_gv: bool = False) -> dict:
-    hs = [detect_shortcuts(t, p, n, d, legacy_gv) for t, p in zip(thinks, prompts)]
+def shortcut_rate(thinks, prompts, n, d, legacy_gv: bool = False, legacy_pe: bool = False) -> dict:
+    hs = [detect_shortcuts(t, p, n, d, legacy_gv, legacy_pe) for t, p in zip(thinks, prompts)]
     c = Counter(h for hh in hs for h in set(hh)); tot = max(1, len(hs))
     return dict(any=sum(1 for hh in hs if hh) / tot, by_type={k: c[k] / tot for k in ("ir_copy_order", "perm_enum", "assign_enum", "guess_verify")}, n=len(hs))

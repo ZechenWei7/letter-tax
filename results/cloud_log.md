@@ -105,3 +105,12 @@
 - 2026-09-19 吞吐测量（不是结果）：A --dry-run 20 步，(8,4,5)，cap 10240，临时 M=8192，vLLM 0.45，micro-batch 1 × GA 32（32 条 / 步）。去掉第 1 步后 19 步均值：494 s / 步（gen 218 s + train 276 s），L_mean 8106，约 25.9 万 token / 步；峰值 allocated 74.43 GiB / reserved 78.41 GiB（整进程，含 vLLM 常驻约 36 GiB）。vLLM KV 27.37 GiB = 199,296 token，10752 token / 请求下最大并发 18.5。投影（$1.6/h）：200 步 = 27.4 h / run；× 11 run = 302 GPU·h ≈ $483（纯训练）；eval 估 1.0 h / 次（stop 500 原生 ≈ 405 万 token ÷ 约 1190 tok/s + direct 2000）× 5 次 / run × 11 = 55 h ≈ $88；合计约 357 GPU·h ≈ **$571**（> cost.budget_usd 300）。cost.py 按矩阵原样（400 步 × 16 run）给 890 GPU·h / $1424。
 - 2026-09-19 准入 ord_n8_h4_d5 @ cap 10240（冻结 Qwen3-4B，stop 500，direct-check 2000）：**未通过，只差第 7 条**。1 direct 0.0045（严格 = 宽松，格式错 0，stop500 0.002；阈值 0.0625）过；逐对 0.612 vs 基线 0.666；2 native 0.608（严格 = 宽松）过；M = 8599.5，强制收尾 37.8%，自然结束 311 条准确率 0.891（长度 min/median/max 3423/6863/10187），被截断 189 条准确率 0.143；全体 L p10/p25/p50/p75/p90 = 5115/6366/8588/10240/10240；3 预算曲线 0.004/0.026/0.226/0.440/0.550，未到 native−5pp=0.558 → ">1.0" 过；4 填充 0.004/0/0.002/0.002/0.004，比较点 0.5/0.75/1.0 均过；5 移植（derangement）0.000，掉 0.608 ≥ 0.302 过；6 letter-ban 0.006 过；7 捷径命中 **0.258** 不过（perm_enum 0.148、guess_verify 定义 C 0.072、ir_copy_order 0.042、assign_enum 0.020；原 r4 定义 any 0.922、guess_verify 0.906）；8 M / (5×Kahn 30) = 286.7× 过（决策下限 32.5 → 264.6×）。perm_enum 74 条里 73 条是"≥8 个不同的完整顺序"触发（1 条短语、0 条 8! / 40320），62 条被截断、13 条答对。第 2 条通过 → cap 12288 重测按规则跳过。策略类（纯描述）100% mixed_probe_enum。
 - 2026-09-19 吞吐调优（D11，5 步 dry-run，cap 10240，vLLM 0.6）：T1（仅 0.6）KV 39.26 GiB = 285,872 token、并发 26.6，第 1 步训练阶段 OOM（要 5.79 GiB，剩 3.83 GiB）。T2（0.6 + sleep mode）5 步跑完：步 2–5 均值 476 s（gen 208 s + train 268 s），L_mean 7786；步 1–5 的 gen/train = 236/266、178/272、229/264、194/272、232/265；torch 报的峰值 allocated 86.31 / reserved 93.22 GiB 超过物理显存——sleep mode 的 cumem 分配器把已让出的 vLLM 池也计入，不能当真实占用；进程退出时 abort（rc=134，5 步已完成、报告已写）。与基线比：每步约快 4%（同期 L_mean 也短 4%），基本无收益。
+
+## 2026-09-19 D12 重算第 7 条：(8,4,5) cap 10240（已存 500 条原生轨迹，不重跑生成；本地计算）
+- 定义：perm_enum 的"≥8 个不同完整顺序"只计入无推理切换（相邻两个不同完整顺序之间 0 个传播 / 分情况标记）里的顺序；关键词各支不变。
+- D12（判定用）：any **0.132**（66/500）｜ir_copy_order 0.042、perm_enum **0.006**、assign_enum 0.020、guess_verify 0.072
+- 仅 D9（D12 之前）：any 0.258｜perm_enum 0.148，其余同上
+- r4 原定义：any 0.922｜perm_enum 0.148、guess_verify 0.906，其余同上
+- 命中 66 条的构成：只 guess_verify 32、只 ir_copy_order 20、只 assign_enum 8、只 perm_enum 2、assign_enum+guess_verify 2、ir_copy_order+guess_verify 1、perm_enum+guess_verify 1
+- 命中 × 结局：自然结束且答对 31、自然结束答错 6、强制收尾答对 8、强制收尾答错 21
+- **第 7 条仍不过（13.2% ≥ 5%）→ 准入未通过；未写正式 admission json；未开机、未启动 A1。** 其余 7 条不变（M = 8599.5）。
