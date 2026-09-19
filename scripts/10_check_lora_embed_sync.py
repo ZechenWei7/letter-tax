@@ -110,6 +110,13 @@ def run_variant(name, model_dir, targets, args, report):
     ok = after[0] < args.tol
     # D3 追加诊断（不改原判定 ok）：跨引擎 bf16 噪声在"改动量"上一阶抵消。
     #   noise_floor = vLLM(基座) vs HF(基座)；delta_agreement = (vLLM 同步后 − 同步前) vs (HF 合并 − HF 基座) 的逐 token 差；delta_corr = 两个改动量的相关系数
+    # D4：base_only 其实是"adapter 激活但未合并"的前向 = **训练端**算 logp 用的前向（TRL 同步后 unmerge）。真正的基座要 disable_adapter。
+    with peft_model.disable_adapter():
+        true_base = hf_logps(peft_model, tok, PROMPTS, merged=False)
+    trainer_fwd = base_only
+    true_noise = max_abs_diff(v_before, true_base)                       # vLLM(基座) vs HF(adapter 关)：纯跨引擎噪声
+    sampler_vs_trainer = max_abs_diff(v_after, trainer_fwd)             # 采样端（同步后的 vLLM）vs 训练端前向（未合并）：GRPO 重要性比率看到的就是它
+    merged_vs_trainer = max_abs_diff(ref, trainer_fwd)                  # 同一引擎内：HF 合并 vs HF 未合并（tied 时 embed 的 delta 合并后会漏进 lm_head）
     noise = max_abs_diff(v_before, base_only)
     d_v = [[a - b for a, b in zip(ra, rb)] for ra, rb in zip(v_after, v_before)]; d_h = [[a - b for a, b in zip(ra, rb)] for ra, rb in zip(ref, base_only)]
     agree = max_abs_diff(d_v, d_h)
@@ -120,6 +127,7 @@ def run_variant(name, model_dir, targets, args, report):
     corr = (sum((x - mv) * (y - mh) for x, y in zip(fv, fh)) / den) if den else None
     rec = dict(targets=targets, model_dir=model_dir, hf_delta_vs_base=delta_hf, vllm_vs_hf_before_sync=before, vllm_vs_hf_after_sync=after,
                noise_floor_vllm_base_vs_hf_base=noise, delta_agreement=agree, delta_corr=corr, vllm_delta_max=max(abs(x) for x in fv),
+               true_noise_floor=true_noise, sampler_vs_trainer=sampler_vs_trainer, hf_merged_vs_trainer_forward=merged_vs_trainer,
                synced_names_sample=[n for n in loaded if any(k in n for k in ("embed_tokens", "lm_head"))][:6], ok=ok)
     print(json.dumps(rec, indent=1), flush=True)
     report["variants"][name] = rec
