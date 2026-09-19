@@ -256,6 +256,7 @@ def main():
         seed=int(tcfg["seed"]), remove_unused_columns=False, log_completions=False, mask_truncated_completions=False,
         **({"use_vllm": True, "vllm_mode": "colocate",
             "vllm_gpu_memory_utilization": float(tcfg.get("vllm_gpu_memory_utilization", 0.3)),
+            "vllm_enable_sleep_mode": bool(tcfg.get("vllm_enable_sleep_mode", False)),   # D11：训练阶段让出 vLLM 的权重 / KV（TRL 0.25.1 colocate），默认关
             # TRL 0.25.1 colocate：args.generation_kwargs 原样并入 SamplingParams → 每请求配置交给引擎级 SpanLogitsProcessor
             "generation_kwargs": ({"extra_args": {EXTRA_KEY: dict(cap=cap, reserve=reserve, mode=mask_mode)}}
                                   if args.arm != "Crand" else None)} if tcfg.get("use_vllm") else {}),
