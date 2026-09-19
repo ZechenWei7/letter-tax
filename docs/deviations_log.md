@@ -6,4 +6,4 @@
 | # | 日期 | commit | 改动 | 原因 | 对预注册的影响 |
 |---|---|---|---|---|---|
 | D1 | 2026-09-19 | `832ec52` | `setup/sync_cloud.sh`：默认目标改为新 pod `root@195.26.233.96:27805`；push 规则放行 `results/whitelist_extra_banned.json` 与 `results/whitelist_audit.md`，并排除 `archive/` | RunPod 自动迁移换了机器（/workspace 迁移后为空，需重推重装）；原 push 规则排除整个 `results/`，会让 pod 缺少 287 个 id 的审计禁集 → 白名单变成 8638 / 8742（与预注册的 8351 / 8455 不符） | 无（基础设施；保证 pod 上的白名单与预注册一致） |
-| D2 | 2026-09-19 | （本提交） | `scripts/10_check_lora_embed_sync.py`：设置 RANK / LOCAL_RANK / WORLD_SIZE / MASTER_ADDR / MASTER_PORT（与 TRL 0.25.1 colocate 相同）；每个变体改为单独子进程；删掉未使用的 untied 变体入口 | 首次在 GPU 上运行即 `KeyError: 'RANK'`（vLLM external_launcher 需要分布式环境变量）；一个进程内多次建引擎会重复初始化进程组 | 无（验证脚本；判定阈值与被测同步逻辑 `trl_sync` 未改） |
+| D2 | 2026-09-19 | `347ab06` | `scripts/10_check_lora_embed_sync.py`：设置 RANK / LOCAL_RANK / WORLD_SIZE / MASTER_ADDR / MASTER_PORT（与 TRL 0.25.1 colocate 相同）；每个变体改为单独子进程；删掉未使用的 untied 变体入口 | 首次在 GPU 上运行即 `KeyError: 'RANK'`（vLLM external_launcher 需要分布式环境变量）；一个进程内多次建引擎会重复初始化进程组 | 无（验证脚本；判定阈值与被测同步逻辑 `trl_sync` 未改） |
