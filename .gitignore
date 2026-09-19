@@ -11,3 +11,4 @@ results/cups_archive/
 *.log
 *.jsonl.zst
 tb/
+*:Zone.Identifier
