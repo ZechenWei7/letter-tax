@@ -1,0 +1,1214 @@
+{
+ "tokenizer": "Qwen/Qwen3-4B",
+ "ids": [
+  16109,
+  23379,
+  36017,
+  46992,
+  62060,
+  89800,
+  96890,
+  144105,
+  144287,
+  144490,
+  144562,
+  144691,
+  144712,
+  144924,
+  145070,
+  145139,
+  145144,
+  145189,
+  145331,
+  145336,
+  145340,
+  145383,
+  145408,
+  145428,
+  145516,
+  145526,
+  145539,
+  145582,
+  145616,
+  145677,
+  145722,
+  145750,
+  145754,
+  145793,
+  145831,
+  145862,
+  145864,
+  145894,
+  145895,
+  145919,
+  146000,
+  146035,
+  146079,
+  146131,
+  146185,
+  146259,
+  146307,
+  146333,
+  146334,
+  146441,
+  146514,
+  146534,
+  146614,
+  146661,
+  146668,
+  146690,
+  146704,
+  146707,
+  146740,
+  146831,
+  146883,
+  146901,
+  146904,
+  146908,
+  146910,
+  146942,
+  146952,
+  146964,
+  146982,
+  146986,
+  146988,
+  147002,
+  147005,
+  147006,
+  147055,
+  147159,
+  147160,
+  147161,
+  147192,
+  147207,
+  147213,
+  147258,
+  147264,
+  147277,
+  147299,
+  147354,
+  147367,
+  147451,
+  147479,
+  147482,
+  147487,
+  147488,
+  147548,
+  147625,
+  147634,
+  147720,
+  147781,
+  147789,
+  147795,
+  147803,
+  147833,
+  147854,
+  147889,
+  147894,
+  147915,
+  147942,
+  148000,
+  148020,
+  148021,
+  148022,
+  148053,
+  148054,
+  148069,
+  148070,
+  148128,
+  148151,
+  148152,
+  148172,
+  148175,
+  148180,
+  148183,
+  148184,
+  148186,
+  148191,
+  148196,
+  148229,
+  148257,
+  148326,
+  148327,
+  148456,
+  148457,
+  148459,
+  148466,
+  148471,
+  148476,
+  148495,
+  148513,
+  148625,
+  148626,
+  148752,
+  148788,
+  148820,
+  148821,
+  148856,
+  148869,
+  148879,
+  148913,
+  148915,
+  149039,
+  149040,
+  149041,
+  149069,
+  149070,
+  149071,
+  149072,
+  149073,
+  149074,
+  149177,
+  149179,
+  149264,
+  149285,
+  149286,
+  149326,
+  149339,
+  149340,
+  149341,
+  149347,
+  149356,
+  149364,
+  149381,
+  149389,
+  149390,
+  149391,
+  149411,
+  149663,
+  149664,
+  149665,
+  149666,
+  149705,
+  149706,
+  149707,
+  149708,
+  149709,
+  149710,
+  149711,
+  149712,
+  149910,
+  149911,
+  149912,
+  149913,
+  150008,
+  150010,
+  150011,
+  150036,
+  150037,
+  150038,
+  150039,
+  150072,
+  150084,
+  150090,
+  150105,
+  150123,
+  150124,
+  150142,
+  150148,
+  150155,
+  150158,
+  150159,
+  150160,
+  150167,
+  150172,
+  150178,
+  150179,
+  150187,
+  150188,
+  150218,
+  150219,
+  150220,
+  150253,
+  150269,
+  150626,
+  150678,
+  150679,
+  150680,
+  150681,
+  150682,
+  150683,
+  150684,
+  150749,
+  150750,
+  150751,
+  150752,
+  150753,
+  150754,
+  150755,
+  150767,
+  150768,
+  150769,
+  150770,
+  150771,
+  150772,
+  150773,
+  150774,
+  150776,
+  150777,
+  150778,
+  150779,
+  150780,
+  150781,
+  150782,
+  150783,
+  150784,
+  150785,
+  150786,
+  150787,
+  150788,
+  150789,
+  151368,
+  151369,
+  151370,
+  151371,
+  151372,
+  151373,
+  151374,
+  151375,
+  151376,
+  151377,
+  151378,
+  151379,
+  151381,
+  151382,
+  151383,
+  151452,
+  151508,
+  151541,
+  151584,
+  151585,
+  151605,
+  151617,
+  151622,
+  151623,
+  151632,
+  151633,
+  151634,
+  151635,
+  151641,
+  151642
+ ],
+ "n": 287,
+ "reasons": {
+  "16109": [
+   "nfkc_letters:'TM'"
+  ],
+  "23379": [
+   "leet:is"
+  ],
+  "36017": [
+   "leet:as"
+  ],
+  "46992": [
+   "nfkc_letters:'\u20acTM'"
+  ],
+  "62060": [
+   "leet:as"
+  ],
+  "89800": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER I",
+   "nfkc_letters:'i'"
+  ],
+  "96890": [
+   "nfkc_letters:'No'"
+  ],
+  "144105": [
+   "nfkc_letters:'\u00b0C'"
+  ],
+  "144287": [
+   "nfkc_letters:'No'"
+  ],
+  "144490": [
+   "nfkc_letters:'(\uc8fc)'"
+  ],
+  "144562": [
+   "nfkc_letters:'m2'"
+  ],
+  "144691": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER C",
+   "nfkc_letters:'c'"
+  ],
+  "144712": [
+   "nfkc_letters:'cm'"
+  ],
+  "144924": [
+   "nfkc_letters:'km'"
+  ],
+  "145070": [
+   "regional_indicator"
+  ],
+  "145139": [
+   "nfkc_letters:'mm'"
+  ],
+  "145144": [
+   "regional_indicator"
+  ],
+  "145189": [
+   "nfkc_letters:'kg'"
+  ],
+  "145331": [
+   "nfkc_letters:'(\u682a)'"
+  ],
+  "145336": [
+   "regional_indicator"
+  ],
+  "145340": [
+   "regional_indicator"
+  ],
+  "145383": [
+   "regional_indicator"
+  ],
+  "145408": [
+   "regional_indicator"
+  ],
+  "145428": [
+   "regional_indicator"
+  ],
+  "145516": [
+   "regional_indicator"
+  ],
+  "145526": [
+   "regional_indicator"
+  ],
+  "145539": [
+   "nfkc_letters:'\u30ad\u30ed'"
+  ],
+  "145582": [
+   "regional_indicator"
+  ],
+  "145616": [
+   "regional_indicator"
+  ],
+  "145677": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER C",
+   "nfkc_letters:'C'"
+  ],
+  "145722": [
+   "nfkc_letters:'m3'"
+  ],
+  "145750": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER E",
+   "nfkc_letters:'e'"
+  ],
+  "145754": [
+   "regional_indicator"
+  ],
+  "145793": [
+   "regional_indicator"
+  ],
+  "145831": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER K",
+   "nfkc_letters:'k'"
+  ],
+  "145862": [
+   "regional_indicator"
+  ],
+  "145864": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER G",
+   "nfkc_letters:'G'"
+  ],
+  "145894": [
+   "nfkc_letters:'\u30e1\u30fc\u30c8\u30eb'"
+  ],
+  "145895": [
+   "nfkc_letters:'mg'"
+  ],
+  "145919": [
+   "regional_indicator"
+  ],
+  "146000": [
+   "regional_indicator"
+  ],
+  "146035": [
+   "regional_indicator"
+  ],
+  "146079": [
+   "regional_indicator"
+  ],
+  "146131": [
+   "regional_indicator"
+  ],
+  "146185": [
+   "nfkc_letters:'\u30bb\u30f3\u30c1'"
+  ],
+  "146259": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER I",
+   "nfkc_letters:'i'"
+  ],
+  "146307": [
+   "nfkc_letters:'km2'"
+  ],
+  "146333": [
+   "nfkc_letters:'\u65e5'"
+  ],
+  "146334": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER A",
+   "nfkc_letters:'a'"
+  ],
+  "146441": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER P",
+   "nfkc_letters:'P'"
+  ],
+  "146514": [
+   "regional_indicator"
+  ],
+  "146534": [
+   "nfkc_letters:'Rs'"
+  ],
+  "146614": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER R",
+   "nfkc_letters:'R'"
+  ],
+  "146661": [
+   "nfkc_letters:'TEL'"
+  ],
+  "146668": [
+   "regional_indicator"
+  ],
+  "146690": [
+   "regional_indicator"
+  ],
+  "146704": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER P"
+  ],
+  "146707": [
+   "nfkc_letters:'\u5927'"
+  ],
+  "146740": [
+   "nfkc_letters:'ha'"
+  ],
+  "146831": [
+   "nfkc_letters:'\u30c8\u30f3'"
+  ],
+  "146883": [
+   "nfkc_letters:'\u03bcg'"
+  ],
+  "146901": [
+   "regional_indicator"
+  ],
+  "146904": [
+   "nfkc_letters:'\u30df\u30ea'"
+  ],
+  "146908": [
+   "nfkc_letters:'\u81ea'"
+  ],
+  "146910": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER B",
+   "nfkc_letters:'b'"
+  ],
+  "146942": [
+   "nfkc_letters:'\u03bcm'"
+  ],
+  "146952": [
+   "nfkc_letters:'\u0631\u06cc\u0627\u0644'"
+  ],
+  "146964": [
+   "nfkc_letters:'\u1100'"
+  ],
+  "146982": [
+   "nfkc_letters:'\u795d'"
+  ],
+  "146986": [
+   "nfkc_letters:'\u6708'"
+  ],
+  "146988": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER O",
+   "nfkc_letters:'o'"
+  ],
+  "147002": [
+   "nfkc_letters:'\u00b0F'"
+  ],
+  "147005": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER S",
+   "nfkc_letters:'S'"
+  ],
+  "147006": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER S",
+   "nfkc_letters:'s'"
+  ],
+  "147055": [
+   "nfkc_letters:'kW'"
+  ],
+  "147159": [
+   "nfkc_letters:'\u884c'"
+  ],
+  "147160": [
+   "nfkc_letters:'\u65b9'"
+  ],
+  "147161": [
+   "nfkc_letters:'ml'"
+  ],
+  "147192": [
+   "regional_indicator"
+  ],
+  "147207": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER A",
+   "nfkc_letters:'A'"
+  ],
+  "147213": [
+   "nfkc_letters:'cc'"
+  ],
+  "147258": [
+   "nfkc_letters:'\u898b'"
+  ],
+  "147264": [
+   "nfkc_letters:'\u7acb'"
+  ],
+  "147277": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER L",
+   "nfkc_letters:'l'"
+  ],
+  "147299": [
+   "nfkc_letters:'\u30c4'"
+  ],
+  "147354": [
+   "nfkc_letters:'\u751f'"
+  ],
+  "147367": [
+   "nfkc_letters:'\u91d1'"
+  ],
+  "147451": [
+   "nfkc_letters:'kcal'"
+  ],
+  "147479": [
+   "nfkc_letters:'\u4eba'"
+  ],
+  "147482": [
+   "nfkc_letters:'\u624b'"
+  ],
+  "147487": [
+   "nfkc_letters:'\u79d8'"
+  ],
+  "147488": [
+   "nfkc_letters:'\u4e00'"
+  ],
+  "147548": [
+   "nfkc_letters:'\uac00'"
+  ],
+  "147625": [
+   "nfkc_letters:'cm2'"
+  ],
+  "147634": [
+   "nfkc_letters:'\u9ad8'"
+  ],
+  "147720": [
+   "regional_indicator"
+  ],
+  "147781": [
+   "nfkc_letters:'(\uc0ac)'"
+  ],
+  "147789": [
+   "nfkc_letters:'\u7528'"
+  ],
+  "147795": [
+   "nfkc_letters:'\u5165'"
+  ],
+  "147803": [
+   "nfkc_letters:'\u9580'"
+  ],
+  "147833": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER M",
+   "nfkc_letters:'M'"
+  ],
+  "147854": [
+   "nfkc_letters:'\u1102'"
+  ],
+  "147889": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER D",
+   "nfkc_letters:'d'"
+  ],
+  "147894": [
+   "nfkc_letters:'MW'"
+  ],
+  "147915": [
+   "regional_indicator"
+  ],
+  "147942": [
+   "nfkc_letters:'(\u571f)'"
+  ],
+  "148000": [
+   "nfkc_letters:'\u30da\u30fc\u30b8'"
+  ],
+  "148020": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER N",
+   "nfkc_letters:'n'"
+  ],
+  "148021": [
+   "nfkc_letters:'(\u65e5)'"
+  ],
+  "148022": [
+   "nfkc_letters:'dl'"
+  ],
+  "148053": [
+   "nfkc_letters:'c/o'"
+  ],
+  "148054": [
+   "nfkc_letters:'SM'"
+  ],
+  "148069": [
+   "nfkc_letters:'\u1103'"
+  ],
+  "148070": [
+   "nfkc_letters:'\ub2e4'"
+  ],
+  "148128": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER F",
+   "nfkc_letters:'f'"
+  ],
+  "148151": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER I",
+   "nfkc_letters:'I'"
+  ],
+  "148152": [
+   "nfkc_letters:'\u1105'"
+  ],
+  "148172": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER D",
+   "nfkc_letters:'D'"
+  ],
+  "148175": [
+   "nfkc_letters:'(\u6709)'"
+  ],
+  "148180": [
+   "nfkc_letters:'\u7530'"
+  ],
+  "148183": [
+   "nfkc_letters:'\u30b0\u30e9\u30e0'"
+  ],
+  "148184": [
+   "nfkc_letters:'\u30ea\u30c3\u30c8\u30eb'"
+  ],
+  "148186": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER H",
+   "nfkc_letters:'h'"
+  ],
+  "148191": [
+   "nfkc_letters:'Sv'"
+  ],
+  "148196": [
+   "nfkc_letters:'\u6ce8'"
+  ],
+  "148229": [
+   "nfkc_letters:'\u76ee'"
+  ],
+  "148257": [
+   "nfkc_letters:'\u1106'"
+  ],
+  "148326": [
+   "nfkc_letters:'\ub77c'"
+  ],
+  "148327": [
+   "nfkc_letters:'nm'"
+  ],
+  "148456": [
+   "nfkc_letters:'\u571f'"
+  ],
+  "148457": [
+   "nfkc_letters:'\u4e0a'"
+  ],
+  "148459": [
+   "nfkc_letters:'\u30c9\u30eb'"
+  ],
+  "148466": [
+   "nfkc_letters:'\u110c'"
+  ],
+  "148471": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER M",
+   "nfkc_letters:'m'"
+  ],
+  "148476": [
+   "nfkc_letters:'\u8eca'"
+  ],
+  "148495": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER V",
+   "nfkc_letters:'v'"
+  ],
+  "148513": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER A"
+  ],
+  "148625": [
+   "nfkc_letters:'\ub098'"
+  ],
+  "148626": [
+   "nfkc_letters:'kHz'"
+  ],
+  "148752": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER P",
+   "nfkc_letters:'p'"
+  ],
+  "148788": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER F",
+   "nfkc_letters:'F'"
+  ],
+  "148820": [
+   "nfkc_letters:'\u529b'"
+  ],
+  "148821": [
+   "nfkc_letters:'\u5de6'"
+  ],
+  "148856": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER T",
+   "nfkc_letters:'T'"
+  ],
+  "148869": [
+   "nfkc_letters:'p.m.'"
+  ],
+  "148879": [
+   "nfkc_letters:'\u5c0f'"
+  ],
+  "148913": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER T",
+   "nfkc_letters:'t'"
+  ],
+  "148915": [
+   "nfkc_letters:'\u77f3'"
+  ],
+  "149039": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER N",
+   "nfkc_letters:'N'"
+  ],
+  "149040": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER G",
+   "nfkc_letters:'g'"
+  ],
+  "149041": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER Y",
+   "nfkc_letters:'y'"
+  ],
+  "149069": [
+   "nfkc_letters:'(\ub098)'"
+  ],
+  "149070": [
+   "nfkc_letters:'\ub9c8'"
+  ],
+  "149071": [
+   "nfkc_letters:'\ubc14'"
+  ],
+  "149072": [
+   "nfkc_letters:'\u682a'"
+  ],
+  "149073": [
+   "nfkc_letters:'\u30b7'"
+  ],
+  "149074": [
+   "nfkc_letters:'Hz'"
+  ],
+  "149177": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER I"
+  ],
+  "149179": [
+   "nfkc_letters:'\u53ef'"
+  ],
+  "149264": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER E"
+  ],
+  "149285": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER Y",
+   "nfkc_letters:'Y'"
+  ],
+  "149286": [
+   "nfkc_letters:'in'"
+  ],
+  "149326": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER L",
+   "nfkc_letters:'L'"
+  ],
+  "149339": [
+   "nfkc_letters:'\u5b50'"
+  ],
+  "149340": [
+   "nfkc_letters:'\u5de5'"
+  ],
+  "149341": [
+   "nfkc_letters:'\u98df'"
+  ],
+  "149347": [
+   "nfkc_letters:'\u5973'"
+  ],
+  "149356": [
+   "nfkc_letters:'Bq'"
+  ],
+  "149364": [
+   "nfkc_letters:'\u5fc3'"
+  ],
+  "149381": [
+   "nfkc_letters:'ps'"
+  ],
+  "149389": [
+   "nfkc_letters:'\u652f'"
+  ],
+  "149390": [
+   "nfkc_letters:'\u793a'"
+  ],
+  "149391": [
+   "nfkc_letters:'\u8272'"
+  ],
+  "149411": [
+   "nfkc_letters:'\u9ed1'"
+  ],
+  "149663": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER B",
+   "nfkc_letters:'B'"
+  ],
+  "149664": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER E",
+   "nfkc_letters:'E'"
+  ],
+  "149665": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER R",
+   "nfkc_letters:'r'"
+  ],
+  "149666": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER U",
+   "nfkc_letters:'u'"
+  ],
+  "149705": [
+   "nfkc_letters:'(\uac00)'"
+  ],
+  "149706": [
+   "nfkc_letters:'(\ub2e4)'"
+  ],
+  "149707": [
+   "nfkc_letters:'\u9069'"
+  ],
+  "149708": [
+   "nfkc_letters:'\u30ae\u30eb\u30c0\u30fc'"
+  ],
+  "149709": [
+   "nfkc_letters:'\u30b5\u30f3\u30c1\u30fc\u30e0'"
+  ],
+  "149710": [
+   "nfkc_letters:'mm2'"
+  ],
+  "149711": [
+   "nfkc_letters:'cm3'"
+  ],
+  "149712": [
+   "nfkc_letters:'m\u2215s'"
+  ],
+  "149910": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER H",
+   "nfkc_letters:'H'"
+  ],
+  "149911": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER N"
+  ],
+  "149912": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER O"
+  ],
+  "149913": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER S"
+  ],
+  "150008": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER H",
+   "nfkc_letters:'H'"
+  ],
+  "150010": [
+   "nfkc_letters:'\u6c34'"
+  ],
+  "150011": [
+   "nfkc_letters:'\u9762'"
+  ],
+  "150036": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER N",
+   "nfkc_letters:'N'"
+  ],
+  "150037": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER S",
+   "nfkc_letters:'S'"
+  ],
+  "150038": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER E"
+  ],
+  "150039": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER N"
+  ],
+  "150072": [
+   "nfkc_letters:'\u7537'"
+  ],
+  "150084": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER A",
+   "nfkc_letters:'A'"
+  ],
+  "150090": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER I",
+   "nfkc_letters:'I'"
+  ],
+  "150105": [
+   "nfkc_letters:'\u8eab'"
+  ],
+  "150123": [
+   "nfkc_letters:'(\u706b)'"
+  ],
+  "150124": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER K",
+   "nfkc_letters:'K'"
+  ],
+  "150142": [
+   "nfkc_letters:'\u98a8'"
+  ],
+  "150148": [
+   "nfkc_letters:'\u6728'"
+  ],
+  "150155": [
+   "nfkc_letters:'\u4e0b'"
+  ],
+  "150158": [
+   "nfkc_letters:'\u53e3'"
+  ],
+  "150159": [
+   "nfkc_letters:'\u8a00'"
+  ],
+  "150160": [
+   "nfkc_letters:'\u6c0f'"
+  ],
+  "150167": [
+   "nfkc_letters:'\u30a2\u30fc\u30eb'"
+  ],
+  "150172": [
+   "nfkc_letters:'\u97f3'"
+  ],
+  "150178": [
+   "nfkc_letters:'\u516b'"
+  ],
+  "150179": [
+   "nfkc_letters:'kl'"
+  ],
+  "150187": [
+   "nfkc_letters:'\u30cf'"
+  ],
+  "150188": [
+   "nfkc_letters:'\u30d8\u30af\u30bf\u30fc\u30eb'"
+  ],
+  "150218": [
+   "nfkc_letters:'\u6bd4'"
+  ],
+  "150219": [
+   "nfkc_letters:'\u30df'"
+  ],
+  "150220": [
+   "nfkc_letters:'\u30dd\u30a4\u30f3\u30c8'"
+  ],
+  "150253": [
+   "nfkc_letters:'(\u6c34)'"
+  ],
+  "150269": [
+   "nfkc_letters:'\u767d'"
+  ],
+  "150626": [
+   "nfkc_letters:'a/s'"
+  ],
+  "150678": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER A",
+   "nfkc_letters:'(a)'"
+  ],
+  "150679": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER B",
+   "nfkc_letters:'(b)'"
+  ],
+  "150680": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER P",
+   "nfkc_letters:'(p)'"
+  ],
+  "150681": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER O",
+   "nfkc_letters:'O'"
+  ],
+  "150682": [
+   "circled_latin:CIRCLED LATIN CAPITAL LETTER U",
+   "nfkc_letters:'U'"
+  ],
+  "150683": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER J",
+   "nfkc_letters:'j'"
+  ],
+  "150684": [
+   "circled_latin:CIRCLED LATIN SMALL LETTER Z",
+   "nfkc_letters:'z'"
+  ],
+  "150749": [
+   "nfkc_letters:'\u4e8c'"
+  ],
+  "150750": [
+   "nfkc_letters:'\u58eb'"
+  ],
+  "150751": [
+   "nfkc_letters:'\u7389'"
+  ],
+  "150752": [
+   "nfkc_letters:'\u8001'"
+  ],
+  "150753": [
+   "nfkc_letters:'\u8d70'"
+  ],
+  "150754": [
+   "nfkc_letters:'\u9577'"
+  ],
+  "150755": [
+   "nfkc_letters:'\u9ce5'"
+  ],
+  "150767": [
+   "nfkc_letters:'(\ub77c)'"
+  ],
+  "150768": [
+   "nfkc_letters:'(\u6728)'"
+  ],
+  "150769": [
+   "nfkc_letters:'(\u91d1)'"
+  ],
+  "150770": [
+   "nfkc_letters:'(\u793e)'"
+  ],
+  "150771": [
+   "nfkc_letters:'(\u4ee3)'"
+  ],
+  "150772": [
+   "nfkc_letters:'\u1107'"
+  ],
+  "150773": [
+   "nfkc_letters:'\u1109'"
+  ],
+  "150774": [
+   "nfkc_letters:'\ud0c0'"
+  ],
+  "150776": [
+   "nfkc_letters:'\u5370'"
+  ],
+  "150777": [
+   "nfkc_letters:'\u53f3'"
+  ],
+  "150778": [
+   "nfkc_letters:'\u30a4'"
+  ],
+  "150779": [
+   "nfkc_letters:'\u30cb'"
+  ],
+  "150780": [
+   "nfkc_letters:'\u30e6'"
+  ],
+  "150781": [
+   "nfkc_letters:'\u30ed'"
+  ],
+  "150782": [
+   "nfkc_letters:'kA'"
+  ],
+  "150783": [
+   "nfkc_letters:'\u03bcl'"
+  ],
+  "150784": [
+   "nfkc_letters:'rad\u2215s2'"
+  ],
+  "150785": [
+   "nfkc_letters:'a.m.'"
+  ],
+  "150786": [
+   "nfkc_letters:'dB'"
+  ],
+  "150787": [
+   "nfkc_letters:'lx'"
+  ],
+  "150788": [
+   "nfkc_letters:'mol'"
+  ],
+  "150789": [
+   "nfkc_letters:'18\u65e5'"
+  ],
+  "151368": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER C",
+   "nfkc_letters:'C'"
+  ],
+  "151369": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER G",
+   "nfkc_letters:'G'"
+  ],
+  "151370": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER A"
+  ],
+  "151371": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER G"
+  ],
+  "151372": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER K"
+  ],
+  "151373": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER L"
+  ],
+  "151374": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER W"
+  ],
+  "151375": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER G"
+  ],
+  "151376": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER L"
+  ],
+  "151377": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER M"
+  ],
+  "151378": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER T"
+  ],
+  "151379": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER W"
+  ],
+  "151381": [
+   "nfkc_letters:'\u6307'"
+  ],
+  "151382": [
+   "nfkc_letters:'\u7981'"
+  ],
+  "151383": [
+   "nfkc_letters:'\u5272'"
+  ],
+  "151452": [
+   "circled_latin:NEGATIVE SQUARED LATIN CAPITAL LETTER B"
+  ],
+  "151508": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER S"
+  ],
+  "151541": [
+   "nfkc_letters:'(\u6708)'"
+  ],
+  "151584": [
+   "circled_latin:SQUARED LATIN CAPITAL LETTER V",
+   "nfkc_letters:'V'"
+  ],
+  "151585": [
+   "circled_latin:NEGATIVE CIRCLED LATIN CAPITAL LETTER D"
+  ],
+  "151605": [
+   "nfkc_letters:'\u1110'"
+  ],
+  "151617": [
+   "nfkc_letters:'(\u76e3)'"
+  ],
+  "151622": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER D",
+   "nfkc_letters:'(d)'"
+  ],
+  "151623": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER F",
+   "nfkc_letters:'(f)'"
+  ],
+  "151632": [
+   "nfkc_letters:'\u5c71'"
+  ],
+  "151633": [
+   "nfkc_letters:'\u4e2d'"
+  ],
+  "151634": [
+   "circled_latin:PARENTHESIZED LATIN SMALL LETTER E",
+   "nfkc_letters:'(e)'"
+  ],
+  "151635": [
+   "nfkc_letters:'\u7f8a'"
+  ],
+  "151641": [
+   "nfkc_letters:'\u6bcd'"
+  ],
+  "151642": [
+   "nfkc_letters:'\u7236'"
+  ]
+ }
+}

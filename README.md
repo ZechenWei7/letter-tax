@@ -42,18 +42,26 @@
 - 捷径（进准入门，<5%）：IR 抄写 + 尾随顺序；全排列枚举；析取分配枚举（位串 / 编号 case / Gray 码 / 嵌套 try-both）；guess-then-verify 循环。
 - 策略类（只报告）：英文分情况、符号分情况、传播为主、枚举（探索分支数 > 3× DPLL 最小值 2^S）、先 probe 再枚举、路径拼接（只用题面边连路）、其他；复制率 = ≥4 token IR 片段占比。人工抽样审计 `scripts/14_strategy_audit.py`（每臂 50 条 → 精确率 / 召回率表）。冻结原生轨迹（01_calibrate）与每臂收敛后正确轨迹（06_diagnose）都跑。
 
+### 2.2b 白名单（`cot_compress/vocab_mask.py` + `results/whitelist_extra_banned.json`，均入 git）
+think 阶段 allowed set（Qwen3 分词器，embedding 行数 151936）：臂 B（letterfree）= **8351** 个 token；臂 A″（letterfree ∪ 单字母 token，带 / 不带前导空格，共 104 个）= **8455**；臂 A = 全词表。
+审计追加禁集 287 个 id（NFKC 后为字母、带圈 / 括号拉丁字母、区域指示符、可 leet 反解的词；`results/whitelist_audit.md`）已从白名单中扣除——不含该文件时会得到 8638 / 8742，属错误配置（r1 冻结 `eceff232` 漏了该文件，已作废）。
+
 ### 2.3 B_warm（`cot_compress/warm.py`，映射表 `docs/warm_map.md`）
 控制词 → 固定符号（含 v8 的 before/after/cycle/first/last/next/ready/order），其余含字母 token 删除；100 条轨迹上策略类分布不变（英文分情况 → 符号分情况为变换定义，单测）；SFT（`scripts/11_sft_warm.py`）+ 无 RL 评估（`train.py --arm Bwarm --eval-only`）。
 
 ### 2.4 解码器（`cot_compress/decoder.py`，`scripts/08_decoder.py`）
-仅前缀的 n-gram（n≤3）词袋，复制片段掩掉；对齐用发布的解析器（前缀里最长事件链长度 = 步数 t），标签 = 题目真值 steps[t]（下一事件 / 真值就绪集 / 已定析取），绝不从轨迹读取；解析不了的前缀排除并报解析率。仪器门：任一臂 next 准确率 ≥90% 且在该臂的移植轨迹**和** C_rand 轨迹上都掉 ≥10pp（配对 bootstrap）；B 条款只在 B 解析率 ≥50% 时生效。另报 soundness / completeness、B_warm 映射配对的密码 Spearman（描述量）。
+仅前缀的 n-gram（n≤3）词袋，复制片段掩掉；标签 = 题目真值 steps[t]（下一事件 / 真值就绪集 / 已定析取），绝不从轨迹读取；解析不了的前缀排除并报解析率。
+- **对齐规则（`parse_step`，发布并冻结）**：在前缀文本里找所有匹配 `\d+(?:\s*(?:<|→|->|,)\s*\d+)+` 的链（数字用 `<`、`→`、`->`、`,` 连接）；丢弃含有不在 0..n−1 内数字的链；步数 t = 各链"去重后事件个数"的最大值，封顶 n；一个链都没有 → 不可解析（该前缀排除）。标签取 `steps[min(t, n)]`。
+- **前缀切法**：每条轨迹的 think 段按**字符长度**的 0.25 / 0.5 / 0.75 / 1.0 切四个前缀（不是按 token）；特征对切出的前缀文本再分词。仪器门：任一臂 next 准确率 ≥90% 且在该臂的移植轨迹**和** C_rand 轨迹上都掉 ≥10pp（配对 bootstrap）；B 条款只在 B 解析率 ≥50% 时生效。另报 soundness / completeness、B_warm 映射配对的密码 Spearman（描述量）。
 
 ### 2.5 准入 §4.2（`cot_compress/admission.py`；冻结 Qwen3-4B，n=500，全部通过）
 先按 2.1 的格统计规则筛，再上 GPU 做八条：(1) 直接作答 exact（`<think></think>` 预填）≤ 2 × chance，chance = 1/#LE(hard)；逐对准确率 vs 硬偏序均匀随机扩展作诊断；严格与宽松抽取都报，准入用严格；(2) 原生 exact ∈ [60,80]%（S≥1 总体）；(3) 强制预算曲线 {0.1,0.25,0.5,0.75,1.0}×M 到 native−5pp 的最小预算 ≥0.5M；(4) 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 10pp 内；(5) 原生轨迹移植 i→j（预填，只生成答案）使准确率向 direct 掉一半以上；(6) 冻结 letter-ban ≤ direct+10pp；(7) 捷径检测器命中 <5%；(8) 中位原生长度 ≥ 5 × Kahn 下限（c=2.5）。
 训练后残留检查：每 50 步在 direct-check 2000 题上，(带轨迹 − 直接) < 冻结差距的一半，连续两次 → 停 run，标不可解释；E1 比较要求臂间训练后直接作答差 ≤3pp。
 
 ### 2.6 训练（`scripts/train.py`，`configs/cloud_4b.yaml`，`configs/matrix_core.yaml`）
-臂 A×3、A″×2、B×4、C_rand×2、B_warm-SFT（每个 A seed 一个）、B_warm-RL×2（条件：B1 在 ≤200 步的最佳准确率 < A1 最佳 − 15pp）。LoRA attention + MLP + embed_tokens（lm_head tied 不挂；embed 按 `scripts/10` 的 q+embed 门控），r=32 α=64 dropout 0，lr 1e-5 warmup 10；奖励 v4（v 只在答案区）；训练 T=1.0，评估 T=0.6 top-p 0.95 top-k 20；停止：连续两个 50 步区间 ΔL<5% 且 Δacc<4pp。
+臂 A×3、A″×2、B×4、C_rand×2、B_warm-SFT（每个 A seed 一个）、B_warm-RL×2（条件：B1 在 ≤200 步的最佳准确率 < A1 最佳 − 15pp）。LoRA attention + MLP + embed_tokens（lm_head tied 不挂；embed 按 `scripts/10` 的 q+embed 门控），r=32 α=64 dropout 0，lr 1e-5 warmup 10；奖励 v4（v 只在答案区）；训练 T=1.0，评估 T=0.6 top-p 0.95 top-k 20；停止：连续两个 50 步区间 ΔL<5% 且 Δacc<4pp（stopping-eval 500 题上的 L_mean 与 acc）。
+**step-0 eval 计入判定历史**：训练开始前的 eval（step 0，即冻结策略）进入 `hist`，因此最早可在 step 100 触发收敛停止（需要 step 0 / 50 / 100 三个点构成两个连续区间）；残留检查的连续计数同样从 step 0 开始。
+操纵门（A seed 1，`run_matrix.first_run_gate`）：相对 step-0 eval token（L_mean）减少 ≥30%、acc 损失 ≤5pp、收敛 L_median ≥ 2 × **Kahn 下限**中位（c=2.5，与 §4.2 第 8 条同一下限；c=2 / 3 只报）；失败按 λ=0.3 → λ=1.0 → G=32 重调。**kill 判定**：A1 收敛 L_median < 1.5 × **决策下限**（d+n）中位（c=2.5）→ 矩阵直接停下报告，不重调。
 残留检查：每 50 步在 direct-check 2000 题上测直接作答，(带轨迹 − 直接) < 冻结差距/2 连续两次 → 停 run 标不可解释；收敛时臂间直接作答差 ≤3pp 才可比。run_matrix 顺序：A1（20 步测速 → 收敛，操纵门）→ Bwarm-SFT s1（只依赖 A1，立刻做）→ B1 → 200 步 warm 判定 → B2–4 → A2–3（各自收敛后跟随同 seed 的 Bwarm-SFT）→ A″ → C_rand → 条件 Bwarm-RL。
 
 ### 2.7 端点 §4.5（`cot_compress/endpoints.py`，`scripts/analyze.py`）

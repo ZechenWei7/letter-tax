@@ -2,7 +2,8 @@
 - --key 覆盖矩阵里所有 run 的格（准入通过的格）。speed_test: true 的 run 先 --dry-run 20 步（写 results/dry_run_*.json）再正式跑。
 - warm_check: true 的 run（B1）跑完后读其 eval.jsonl 中 step ≤ 200 的最佳准确率，与 A1 的最佳准确率比：< A1 − 15pp → cold_start_failure=True（写 results/warm_decision_<key>.json），
   条件项 Bwarm（conditional: cold_start_failure）据此决定是否跑。Bwarm_sft 项 source: A_seed → 用同 seed 的 A run 作 SFT 源。
-- 第一个 run 固定为 A seed 1（操纵门）：相对臂 0（step-0 eval）token 减少 ≥ 30%、acc 损失 ≤ 5pp、且收敛 L ≥ 2× oracle 下限（c=2.5，stopping-eval 中位；c=2 / 3 只报）。
+- 第一个 run 固定为 A seed 1（操纵门）：相对臂 0（step-0 eval）token 减少 ≥ 30%、acc 损失 ≤ 5pp、且收敛 L_median ≥ 2× Kahn 下限（c=2.5，stopping-eval 中位；c=2 / 3 只报）。
+  kill 判定：A1 收敛 L_median < 1.5× 决策下限（d+n，c=2.5）→ 矩阵直接停下报告，不重调。
   不满足 → 按 λ=0.3 → λ=1.0 → G=32 顺序重调 A s1（tag _lam0.3 / _lam1.0 / _G32）；某次通过则后续全部 run 继承该设置；全失败 → 停下报告。
 - --max-runs N：按 priority（越小越先裁）裁剪；C_rand(1) → A″(2) → A/B(3)。
 - 抢占恢复：已有 checkpoint 自动 --resume；已有 final/ 跳过。
@@ -24,17 +25,18 @@ def run_name(r):
 RETUNE = [dict(tag="_lam0.3", set=["reward.lambda=0.3"], lam=0.3), dict(tag="_lam1.0", set=["reward.lambda=1.0"], lam=1.0),
           dict(tag="_G32", set=["train.num_generations=32", "train.gradient_accumulation_steps=64"], lam=None)]
 
-def oracle_lb_median(key, c="2.5"):
-    """stopping-eval 500 题 oracle 下限（v8：决策下限 d+n；默认 c=2.5；门里另报 c=2 / 3）的中位数（无则读 results/admission_<key>.json）。"""
+def oracle_lb_median(key, c="2.5", which="kahn"):
+    """stopping-eval 500 题下限（token）的中位数。which="kahn"：Kahn 下限（操纵门的 2× 条件，与 §4.2 第 8 条同一下限）；which="decision"：决策下限 d+n（kill 判定）。
+    默认 c=2.5；门里另报 c=2 / 3。无划分文件则读 results/admission_<key>.json。"""
     import statistics
     try:
         import tasks
         items = tasks.task_for_key(key).load_splits(key, 0)["stop"]
-        lbk = "decision_lb_tokens" if key.startswith("ord_") else "oracle_lb"
+        lbk = ("kahn_lb_tokens" if which == "kahn" else "decision_lb_tokens") if key.startswith("ord_") else "oracle_lb"
         return float(statistics.median(it["meta"][lbk][c] for it in items))
     except Exception:
         f = ROOT / f"results/admission_{key}.json"
-        return float(json.load(open(f))["oracle_lb"][c]) if f.exists() else None
+        return float(json.load(open(f))[("kahn_lb" if which == "kahn" else "decision_lb")][c]) if f.exists() else None
 
 def externalized(diag):
     return diag["acc"] - diag.get("direct_acc", 0.0)
@@ -92,15 +94,18 @@ def prune(runs, max_runs):
     drop = set(order[:len(runs) - max_runs])
     return [r for i, r in enumerate(runs) if i not in drop]
 
-def first_run_gate(run_dir: pathlib.Path, min_reduction=0.30, max_acc_loss=0.05, oracle_lb=None, oracle_mult=2.0) -> dict:
+def first_run_gate(run_dir: pathlib.Path, min_reduction=0.30, max_acc_loss=0.05, oracle_lb=None, oracle_mult=2.0, kill_lb=None, kill_mult=1.5) -> dict:
+    """操纵门（A seed 1）：token 减少 ≥30%、acc 损失 ≤5pp、收敛 L_median ≥ 2 × Kahn 下限中位（c=2.5）。
+    kill 判定：收敛 L_median < 1.5 × 决策下限中位（c=2.5）→ kill=True（矩阵直接停下报告，不进入 λ / G 重调）。"""
     ev = [json.loads(l) for l in open(run_dir / "eval.jsonl")]
     e0 = next((e for e in ev if e["step"] == 0), None); e1 = ev[-1]
     if e0 is None:
         return dict(ok=False, reason="no step-0 eval (arm 0 anchor missing)")
     red = 1 - e1["L_mean"] / max(e0["L_mean"], 1); loss = e0["acc"] - e1["acc"]
     above_oracle = (e1["L_median"] >= oracle_mult * oracle_lb) if oracle_lb is not None else None
-    return dict(ok=(red >= min_reduction and loss <= max_acc_loss and above_oracle is not False), token_reduction=round(red, 3), acc_loss=round(loss, 3),
-                oracle_lb_c2_5=oracle_lb, L_median_final=e1["L_median"], above_2x_oracle=above_oracle,
+    kill = (e1["L_median"] < kill_mult * kill_lb) if kill_lb is not None else False
+    return dict(ok=(red >= min_reduction and loss <= max_acc_loss and above_oracle is not False and not kill), kill=kill, token_reduction=round(red, 3), acc_loss=round(loss, 3),
+                kahn_lb_c2_5=oracle_lb, decision_lb_c2_5=kill_lb, L_median_final=e1["L_median"], above_2x_kahn=above_oracle,
                 arm0=dict(L=e0["L_mean"], acc=e0["acc"]), final=dict(step=e1["step"], L=e1["L_mean"], acc=e1["acc"]))
 
 def main():
@@ -180,10 +185,14 @@ def main():
                     wd = warm_decision(r["key"], float(r["lam"])); print(f"[warm decision] {json.dumps(wd)}", flush=True)
                     with open(log, "a") as f: f.write(f"- warm decision after {name}: {json.dumps(wd)}\n")
         if r.get("_gate", idx == 0) and not args.skip_gate and not args.dry_run:
-            g = first_run_gate(rd, oracle_lb=oracle_lb_median(r["key"])); g["oracle_lb_c2"] = oracle_lb_median(r["key"], "2"); g["oracle_lb_c3"] = oracle_lb_median(r["key"], "3")
+            g = first_run_gate(rd, oracle_lb=oracle_lb_median(r["key"], "2.5", "kahn"), kill_lb=oracle_lb_median(r["key"], "2.5", "decision"))
+            g["kahn_lb_c2"] = oracle_lb_median(r["key"], "2", "kahn"); g["kahn_lb_c3"] = oracle_lb_median(r["key"], "3", "kahn")
+            g["decision_lb_c2"] = oracle_lb_median(r["key"], "2", "decision"); g["decision_lb_c3"] = oracle_lb_median(r["key"], "3", "decision")
             with open(log, "a") as f:
                 f.write(f"- first-run gate {name}: {json.dumps(g)}\n")
             print(f"[gate] {json.dumps(g)}", flush=True)
+            if g.get("kill"):
+                print("[gate] KILL: converged L_median < 1.5 × decision lower bound (c=2.5) — matrix stopped for review (no retune)", flush=True); return
             if not g["ok"]:
                 k = r.get("_retune", 0)
                 if k >= len(RETUNE):

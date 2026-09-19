@@ -13,6 +13,12 @@
 | 9 | 测试 | 见各行；沿用 mask / logprob / C_rand / B_warm / 奖励穷举 | `python -m pytest tests -q`：94 通过、2 跳过（opt-in 10k），7.3 min；ORD_FULL 10k 通过 |
 | 10 | 文档 | README §2 v8 + 预注册 hash 占位；本文件；`scripts/13_instrument_control.py` 改用排序题（英文 152 token / 符号 84 / warm 107；比 0.55 / 0.70；无捷径命中）→ `results/instrument_control.json`（K&K 版存 `_kk.json`） | 脚本已运行 |
 
+## r2 冻结修正（2026-09-19；r1 `eceff232` 作废）
+1. `results/whitelist_extra_banned.json`（287 id）与 `results/whitelist_audit.md` 纳入 git（`.gitignore` 例外）；白名单 B = 8351、A″ = 8455（README §2.2b）。r1 漏了该文件，按 r1 树算出的是 8638 / 8742。
+2. `run_matrix.first_run_gate`：2× 条件改用 Kahn 下限中位（c=2.5）；新增 kill 判定（A1 收敛 L_median < 1.5× 决策下限中位 → 停矩阵不重调）；`oracle_lb_median(key, c, which)`；测试 `test_run_matrix_prune_gate_retune` 覆盖。
+3. `configs/cloud_4b.yaml` 注释 3pp → 4pp（代码一直是 4pp）。
+4. README 写明：`parse_step` 对齐规则、前缀按字符长度切、step-0 eval 计入停止 / 残留判定历史。
+
 ## 已按用户 2026-09-18 决定落实
 1. "单元素步占比 ≤0.8" 作废，改为"闭包传播下首次非单元素就绪集位置中位 ≤ n/2"；四格重算（表见下与 README §2.1），四格全部通过。
 2. 引导生成按现状，结论（cover_exact 100% 是构造必然；均匀接受率 0）已写进 README。

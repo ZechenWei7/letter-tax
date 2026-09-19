@@ -6,6 +6,8 @@ samples/
 cloud_pull/
 archive/
 results/cups_archive/
+!results/whitelist_extra_banned.json
+!results/whitelist_audit.md
 *.log
 *.jsonl.zst
 tb/

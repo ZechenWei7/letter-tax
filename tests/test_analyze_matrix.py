@@ -93,9 +93,10 @@ def test_run_matrix_prune_gate_retune(tmp_path):
     assert [r["arm"] for r in rm.prune(runs, 3)] == ["A", "B", "B"] and [r["arm"] for r in rm.prune(runs, 2)] == ["A", "B"]
     with open(tmp_path / "eval.jsonl", "w") as f:
         f.write(json.dumps(dict(step=0, L_mean=3000, L_median=3000, acc=0.70)) + "\n"); f.write(json.dumps(dict(step=200, L_mean=1800, L_median=1700, acc=0.68)) + "\n")
-    g = rm.first_run_gate(tmp_path, oracle_lb=27.5)
-    assert g["ok"] and g["token_reduction"] == pytest.approx(0.4) and g["above_2x_oracle"]
-    assert not rm.first_run_gate(tmp_path, oracle_lb=900.0)["ok"]                                  # 收敛 L 1700 < 2×900
+    g = rm.first_run_gate(tmp_path, oracle_lb=30.0, kill_lb=32.5)
+    assert g["ok"] and g["token_reduction"] == pytest.approx(0.4) and g["above_2x_kahn"] and g["kill"] is False
+    assert not rm.first_run_gate(tmp_path, oracle_lb=900.0)["ok"]                                  # 收敛 L 1700 < 2×900（Kahn）
+    k = rm.first_run_gate(tmp_path, oracle_lb=30.0, kill_lb=1200.0); assert k["kill"] and not k["ok"]  # 1700 < 1.5×1200（决策下限）
     with open(tmp_path / "eval.jsonl", "a") as f: f.write(json.dumps(dict(step=250, L_mean=2500, L_median=2400, acc=0.69)) + "\n")
     assert not rm.first_run_gate(tmp_path, oracle_lb=27.5)["ok"]
     assert [x["tag"] for x in rm.RETUNE] == ["_lam0.3", "_lam1.0", "_G32"] and rm.run_name(dict(arm="Bwarm_sft", key="kk_n10_s1", seed=1)) == "Bwarm_sft_kk_n10_s1_s1"

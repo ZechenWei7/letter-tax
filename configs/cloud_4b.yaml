@@ -47,7 +47,7 @@ train:
   vllm_gpu_memory_utilization: 0.45  # 36 GB：权重 7.6 + KV ~27 GB（32 条 × 5.6k token × 147 KB/token）；训练侧留 ~44 GB
   save_every: 25                     # 云上可能被抢占：每 25 步存，run_matrix 自动 --resume
   save_total_limit: 2                # 只留最近 2 个 checkpoint；final/ 另存（B_seq 的 init_from 用）
-  max_steps: 400                     # 或提前停止：连续两个 50 步区间 ΔL_mean<5% 且 Δacc<3pp
+  max_steps: 400                     # 或提前停止：连续两个 50 步区间 ΔL_mean<5% 且 Δacc<4pp
   beta: 0.0                          # 默认 0；可设 0.01（KL 的参考分布同样在该臂 mask 下重归一化）
   init_from: null                    # 臂 Bwarm / --eval-only：runs/Bwarm_sft_<tag>/final
   crand_source: null                 # 臂 C_rand：runs/<B run>（取收敛轨迹的长度分布与 unigram）
