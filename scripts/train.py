@@ -267,6 +267,8 @@ def main():
     # ---- eval ----
     trainer_ref = {}
     eval_gen = dict(gcfg, batch_size=int(gcfg.get("eval_batch_size", 4)), max_new_tokens_think=cap)
+    dre = int(tcfg.get("dry_run_eval_n", 0)) if args.dry_run else 0      # D16（排查用）：--dry-run 前先走一次小 eval（与正式 run 的 step-0 eval 同一条代码路径；think 与 direct 各 dre 题）
+    if dre: kcfg = dict(kcfg, eval_n=dre, direct_check_n=dre)
     eval_items = tasks.make_eval_set(key, int(kcfg["eval_n"]), seed=int(kcfg["seed"]), **({"split": "stop"} if key.startswith(("kk_", "ord_")) else {}))   # 停止判据只用 stopping-eval
     direct_items = tasks.make_eval_set(key, int(kcfg.get("direct_check_n", 2000)), split="direct") if key.startswith("ord_") else None   # v8 残留检查：direct-check 2000 题
     frozen_direct = None
@@ -350,8 +352,8 @@ def main():
             else:
                 model.train()
             torch.cuda.empty_cache()
-    if not args.smoke and not args.dry_run and not args.eval_only:
-        eval_cb = EvalCallback(do_eval, int(kcfg["eval_every"]), at_start=not args.no_eval_at_start, dacc=float(tcfg.get("stop_dacc", 0.04)),
+    if (not args.smoke and not args.dry_run and not args.eval_only) or dre:
+        eval_cb = EvalCallback(do_eval, (10 ** 9 if dre else int(kcfg["eval_every"])), at_start=not args.no_eval_at_start, dacc=float(tcfg.get("stop_dacc", 0.04)),
                                frozen_direct=frozen_direct, run_dir=run_dir, arm=args.arm)
         callbacks.append(eval_cb)
 
