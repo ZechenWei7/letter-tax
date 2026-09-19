@@ -249,8 +249,9 @@ def run_admission(args):
             from collections import Counter
             pk = task.parse_key(key)
             _sr = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"]); template_rate = _sr["any"]
-            _sr_legacy = shortcut_rate([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"], legacy_gv=True, legacy_pe=True)     # D9 / D12：r4 原定义并报
-            print(f"  shortcut by type (D9 def C + D12): {_sr['by_type']} | legacy r4 definition: any={_sr_legacy['any']:.3f} {_sr_legacy['by_type']}", flush=True)
+            from cot_compress.shortcuts import shortcut_rates_all
+            _sr_all = shortcut_rates_all([think_text(r["completion"]) for r in nat], [it["prompt"] for it in items], pk["n"], pk["d"]); _sr_legacy = _sr_all["r4"]     # D13：四种定义并报，全是描述量
+            print("  shortcut rates (descriptive; criterion 7 = manual audit, D13): " + " | ".join(f"{v}: any={x['any']:.3f} {x['by_type']}" for v, x in _sr_all.items()), flush=True)
             oracle_lb = {c: float(statistics.median(it["meta"]["kahn_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}     # 第 8 条用 Kahn 下限
             decision_lb = {c: float(statistics.median(it["meta"]["decision_lb_tokens"][c] for it in items)) for c in ("2", "2.5", "3")}
             pw = [task.pairwise_accuracy([int(x) for x in r["pred"].split()], it["meta"]["sigma"]) for r, it in zip(d_rows, d_items) if r.get("pred")]
@@ -307,7 +308,7 @@ def run_admission(args):
                        direct_format_err=summarize(d_rows)["format_err"], max_new_tokens_direct=int(gen_cfg["max_new_tokens_direct"]),
                        d=(task.parse_key(key)["d"] if key.startswith("ord_") else None), transplant_pairing="derangement",
                        strategy_class_native=(strat if key.startswith("ord_") else None),
-                       shortcut_by_type=(_sr["by_type"] if key.startswith("ord_") else None), shortcut_legacy_r4=(dict(any=_sr_legacy["any"], by_type=_sr_legacy["by_type"]) if key.startswith("ord_") else None),
+                       shortcut_by_type=(_sr["by_type"] if key.startswith("ord_") else None), shortcut_legacy_r4=(dict(any=_sr_legacy["any"], by_type=_sr_legacy["by_type"]) if key.startswith("ord_") else None), shortcut_rates=(_sr_all if key.startswith("ord_") else None),
                        kahn_lb=(oracle_lb if key.startswith("ord_") else None), decision_lb=(decision_lb if key.startswith("ord_") else None),
                        pairwise_direct=(pairwise_direct if key.startswith("ord_") else None), pairwise_baseline=(pairwise_baseline if key.startswith("ord_") else None))
         if key.startswith("cups"):

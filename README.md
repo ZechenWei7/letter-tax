@@ -39,7 +39,7 @@
 - 每题存：σ、S、两个下限、规范路径（最低编号未决析取优先、先第一边）、每步真值就绪集 / 下一事件 / 已定析取（解码器标签）。
 
 ### 2.2 捷径与策略检测器（`cot_compress/shortcuts.py`，训练前冻结）
-- 捷径（进准入门，<5%）：IR 抄写 + 尾随顺序；全排列枚举；析取分配枚举（位串 / 编号 case / Gray 码 / 嵌套 try-both）；guess-then-verify 循环。
+- 捷径（预注册时进准入门 <5%；**D13 起只是描述量**，r4 / D9 / D12 / D13 四种定义并报）：IR 抄写 + 尾随顺序；全排列枚举；析取分配枚举（位串 / 编号 case / Gray 码 / 嵌套 try-both）；guess-then-verify 循环。
 - 策略类（**纯描述量**，不进任何门、不参与任何判定或读法）：英文分情况、符号分情况、传播为主、枚举（探索分支数 > 3× DPLL 最小值 2^S）、mixed_probe_enum（= 枚举 且（propagation 标记 ≥1 或 try-both 标记））、路径拼接（只用题面边连路）、其他；复制率 = ≥4 token IR 片段占比。
   定义以 `cot_compress/shortcuts.py` 为准：**case 标记** = `strategy.ROLES["case_splits"]`（assume / suppose / case / if）及其 B_warm 符号（» § ¿）的出现次数，分支数 = case 标记 + `try` 次数；**字母占比** = `lengths.letter_fraction`（think 段非空白字符中 Unicode L* 类字符的比例；英文 / 符号分情况以 0.3 为界，A 的"低字母占比"同为 <30%）。人工抽样审计 `scripts/14_strategy_audit.py`（每臂 50 条 → 精确率 / 召回率表）。冻结原生轨迹（01_calibrate）与每臂收敛后正确轨迹（06_diagnose）都跑。
 
@@ -56,7 +56,7 @@ think 阶段 allowed set（Qwen3 分词器，embedding 行数 151936）：allowe
 - **前缀切法**：每条轨迹的 think 段按**字符长度**的 0.25 / 0.5 / 0.75 / 1.0 切四个前缀（不是按 token）；特征对切出的前缀文本再分词。仪器门：任一臂 next 准确率 ≥90% 且在该臂的移植轨迹**和** C_rand 轨迹上都掉 ≥10pp（配对 bootstrap）；B 条款只在 B 解析率 ≥50% 时生效。另报 soundness / completeness、B_warm 映射配对的密码 Spearman（描述量）。
 
 ### 2.5 准入 §4.2（`cot_compress/admission.py`；冻结 Qwen3-4B，n=500，全部通过）
-先按 2.1 的格统计规则筛，再上 GPU 做八条：(1) 直接作答 exact（`<think></think>` 预填）≤ 2 × 2^−d，**在 direct-check 2000 题上测**；1/#LE(hard) 只报；逐对准确率 vs 硬偏序均匀随机扩展作诊断；严格与宽松抽取都报，准入用严格；(2) 原生 exact ∈ [60,80]%（S≥1 总体）；(3) 强制预算曲线 {0.1,0.25,0.5,0.75,1.0}×M 到 native−5pp 的最小预算 ≥0.5M；(4) 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 10pp 内；(5) 原生轨迹移植 i→j（预填，只生成答案；配对 = 随机错位 derangement，`admission.derangement`）使准确率向 direct 掉一半以上；(6) 冻结 letter-ban ≤ direct+10pp；(7) 捷径检测器命中 <5%；(8) 中位原生长度 ≥ 5 × Kahn 下限（c=2.5）。
+先按 2.1 的格统计规则筛，再上 GPU 做八条：(1) 直接作答 exact（`<think></think>` 预填）≤ 2 × 2^−d，**在 direct-check 2000 题上测**；1/#LE(hard) 只报；逐对准确率 vs 硬偏序均匀随机扩展作诊断；严格与宽松抽取都报，准入用严格；(2) 原生 exact ∈ [60,80]%（S≥1 总体）；(3) 强制预算曲线 {0.1,0.25,0.5,0.75,1.0}×M 到 native−5pp 的最小预算 ≥0.5M；(4) 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 10pp 内；(5) 原生轨迹移植 i→j（预填，只生成答案；配对 = 随机错位 derangement，`admission.derangement`）使准确率向 direct 掉一半以上；(6) 冻结 letter-ban ≤ direct+10pp；(7) 捷径检测器命中 <5%（**D13：改为人工审计"模板 / 抄答案"占比 <5%，四个检测器降为描述量，见 `docs/deviations_log.md` 与 `results/audit_criterion7_<key>.md`**）；(8) 中位原生长度 ≥ 5 × Kahn 下限（c=2.5）。
 M（奖励里的长度归一化）= 准入这 500 条原生轨迹的中位长度（`results/admission_<key>.json["M"]`），不再用 M.json 的 32 题。
 训练后残留检查（`cot_compress/stopping.py`；**C_rand 豁免**）：每 50 步在 direct-check 2000 题上测直接作答；**仅当带轨迹 acc ≥ 冻结 direct + 10pp 之后生效**（锁存）；停止条件 direct ≥ acc_trace − (acc_trace − frozen_direct)/2 连续两次 → 停 run，标不可解释；E1 比较要求臂间训练后直接作答差 ≤3pp，否则标 "not comparable"。
 

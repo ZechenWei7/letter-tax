@@ -11,7 +11,8 @@ metrics 由 01_calibrate.py --admission 在 stopping-eval 500 题（split="stop"
   4 白名单 unigram 填充在 ≥0.5M 任一预算不进 native 曲线 10pp 内（D10：只在该预算点 native > chance + 10pp 时比较；否则两者都≈0，"10pp 内"空成立）
   5 原生轨迹移植 i→j 使准确率向 direct 掉一半以上：native − transplant ≥ (native − direct)/2；配对 = **随机错位**（derangement：均匀随机置换、无不动点，见 derangement()）
   6 冻结 letter-ban ≤ direct + 10pp
-  7 捷径检测器命中 < 5%
+  7 （D13）人工审计：原生轨迹里"模板 / 抄答案"的比例 < 5%（metrics["audit_template_rate"]，审计表 results/audit_criterion7_<key>.md；未审计 → pending）。
+    四个自动捷径检测器降为描述量，r4 / D9 / D12 / D13 四种定义的命中率并报（metrics["shortcut_rates"]）
   8 中位原生长度 M ≥ 5 × Kahn 下限（c=2.5）；决策下限与 c=2/3 只报
 先按格统计规则筛（tasks/ordering.cell_decision），通过的格再上 GPU 做八项；候选格顺序 = CELL_ORDER。
 训练后残留检查（cot_compress/stopping.py，C_rand 豁免）：每 50 步 direct-check 2000 题；带轨迹 acc ≥ 冻结 direct + 10pp 后生效；direct ≥ acc − (acc − 冻结 direct)/2 连续两次 → 停 run 标不可解释；
@@ -53,8 +54,9 @@ def admission_decision(m: dict, native_lo: float = 0.60, native_hi: float = 0.80
     drop = native - m["transplant_acc"]; need = (native - direct) * 0.5
     checks["5_transplant_drop_ge_half_to_direct"] = dict(ok=drop >= need, drop=drop, required=need)
     checks["6_masked_frozen_le_direct+10pp"] = dict(ok=m["masked_frozen_acc"] <= direct + 0.10, masked_frozen_acc=m["masked_frozen_acc"])
-    t = m.get("template_hit_rate")
-    checks["7_shortcut_hits_lt_5pct"] = dict(ok=(None if t is None else t < TEMPLATE_MAX), rate=t)
+    t = m.get("audit_template_rate")                                            # D13：人工审计判定；检测器命中率只是描述量
+    checks["7_template_audit_lt_5pct"] = dict(ok=(None if t is None else t < TEMPLATE_MAX), audit_template_rate=t, audit_file=m.get("audit_file"),
+                                              detector_rates_descriptive=m.get("shortcut_rates"), detector_rate_D13=m.get("template_hit_rate"))
     kl = m.get("kahn_lb") or {}; dl = m.get("decision_lb") or {}
     lb = kl.get(ORACLE_C); M = m.get("M")
     checks["8_M_ge_5x_kahn_c2.5"] = dict(ok=(None if (lb is None or M is None) else M >= ORACLE_MULT * lb), M=M, kahn_lb_c2_5=lb,

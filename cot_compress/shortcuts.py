@@ -1,4 +1,4 @@
-"""v8 捷径检测器（进准入门：原生轨迹命中 < 5%）与策略类检测器（不进门，只报告），针对 ordering 题面。训练前发布、冻结。
+"""v8 捷径检测器与策略类检测器，针对 ordering 题面。**D13 起四个捷径检测器都是描述量**（准入第 7 条改为人工审计，见 admission.py）；r4 / D9 / D12 / D13 四种定义的命中率并报（VERSIONS）。
 捷径（detect_shortcuts）：
   ir_copy_order   : ≥50% 的 IR 约束 token（硬对 a<b、析取项）作为**整 token** 出现在 think 里（且至少一个析取项被整体抄写），且 think 末尾 200 字符内有 n 事件的全排列
   perm_enum       : 全排列枚举——出现 "n!"、n! 的数值（40320 / 362880）、"all permutations"、"itertools"，或 ≥ 8 个不同的 n 事件全排列；
@@ -6,6 +6,8 @@
   assign_enum     : 析取分配枚举 = 对剩余分配立方体的系统覆盖：≥4 个不同的 d 位 0/1 串；或编号 case 最大号 ≥ 2^(d−1) 且不同编号 ≥ max(4, 2^(d−1))；或提到 Gray code；或嵌套 try-both 标记 ≥ d
   guess_verify    : （D9 定义 C）≥3 个"带验证词的完整顺序"（全排列后 80 字符内有 check / verify / valid / satisf / violat / holds / fails / ✓ / ✗），且存在一对相邻、顺序不同的此类候选，
                     二者之间没有任何传播 / 分情况标记（assume suppose case if / then so therefore thus hence 及其符号）；同一顺序的重述与逐条复核不算
+  D13 修两个 bug：guess_verify 的候选里去掉恒等排列 0 1 … n−1 与事件清点（"The events are 0,1,…" 一类清单本身是一个合法全排列）；
+                    ir_copy_order 另要求最后一处抄写片段与最终顺序之间没有任何传播 / 分情况标记（开头复述、逐条核对清单、回读题面都不算）
 策略类（strategy_class）——**纯描述量**，不进任何门、不参与任何判定或读法：
   english_case（含字母的分情况叙述：assume/suppose/case + then）、symbolic_case（» § ¿ 等符号分情况、字母占比 < 0.3）、propagation（传播词/符号为主、无分情况标记）、
   enumeration（探索分支数 > 3 × 2^S，分支 = 分情况标记 + try）、mixed_probe_enum（enum 且（propagation 标记 ≥1 或 try-both 标记））、
@@ -47,14 +49,24 @@ def ir_items(prompt: str) -> list[str]:
     """IR 约束 token（硬对 a<b、析取项 (a<b)|(c<d)），只按形状解析（对 warm 变换后的题面同样有效）。"""
     return _IR_ITEM.findall(prompt)
 
-def detect_shortcuts(think: str, prompt: str, n: int, d: int, legacy_gv: bool = False, legacy_pe: bool = False) -> list[str]:
-    """legacy_gv=True：guess_verify 用预注册（r4）的原定义（≥3 个带验证词的完整顺序）；legacy_pe=True：perm_enum 用 r4 原定义（≥8 个不同全排列，不看间隔）。只用于并报，不用于判定。"""
+VERSIONS = ("r4", "D9", "D12", "D13")          # r4 = 预注册原定义；D9 = guess_verify 定义 C；D12 = + perm_enum 无推理切换；D13 = + 恒等排列 / 事件清点、ir_copy 间隔两处修正
+_INVENTORY = re.compile(r"(events?|numbers?|elements?)\s*(are|:|from)[^\n]{0,20}$|all\s+(the\s+)?(events|numbers)[^\n]{0,20}$", re.I)
+
+def detect_shortcuts(think: str, prompt: str, n: int, d: int, legacy_gv: bool = False, legacy_pe: bool = False, version: str = "D13") -> list[str]:
+    """version ∈ VERSIONS（默认 D13）。legacy_gv / legacy_pe 为旧接口：分别把 guess_verify / perm_enum 退回 r4 原定义。全部只是描述量。"""
+    assert version in VERSIONS
+    legacy_gv = legacy_gv or version == "r4"; legacy_pe = legacy_pe or version in ("r4", "D9"); d13 = version == "D13" and not legacy_gv
     hits = []
     items = ir_items(prompt); perms = permutations_in(think, n)
     toks = {t.strip(".,;:") for t in think.split()}                     # 整 token 级匹配（嵌在链 "2<3<0<1" 里的不算抄写）
     disj_items = [it for it in items if "|" in it]
     if items and sum(1 for it in items if it in toks) / len(items) >= 0.5 and any(it in toks for it in disj_items) and permutations_in(think[-200:], n):
-        hits.append("ir_copy_order")                                          # 至少抄了一个析取项（复述硬约束是正常推理）
+        ok = True
+        if version == "D13":                                                  # D13：最后一处抄写片段与最终顺序之间无推理标记才算"抄完直接给顺序"
+            off = max(0, len(think) - 200); fin = perm_spans(think[-200:], n)[-1]; fin_start = off + fin[0]
+            ends = [m.end() for it in items for m in re.finditer(r"(?<!\S)" + re.escape(it) + r"(?=[\s.,;:]|$)", think[:fin_start])]
+            ok = bool(ends) and reasoning_markers(think[max(ends):fin_start]) == 0
+        if ok: hits.append("ir_copy_order")                                   # 至少抄了一个析取项（复述硬约束是正常推理）
     if (f"{n}!" in think or str(math.factorial(n)) in think or _PERM_WORDS.search(think)
             or len(set(perms) if legacy_pe else unreasoned_orders(think, n)) >= 8):      # D12
         hits.append("perm_enum")
@@ -69,6 +81,7 @@ def detect_shortcuts(think: str, prompt: str, n: int, d: int, legacy_gv: bool = 
     for m in re.finditer(r"\d+(?:[ \t]*(?:[ ,<→>\-]|->)[ \t]*\d+)+", think):
         vals = [int(x) for x in re.findall(r"\d+", m.group(0))]
         if len(vals) == n and sorted(vals) == list(range(n)) and _VERIFY.search(think[m.end():m.end() + 80]):
+            if d13 and (vals == list(range(n)) or _INVENTORY.search(think[max(0, m.start() - 40):m.start()])): continue      # D13：恒等排列 / 事件清点不是候选
             cands.append((m.start(), m.end(), tuple(vals)))
     if len(cands) >= 3 and (legacy_gv or any(a[2] != b[2] and reasoning_markers(think[a[1]:b[0]]) == 0 for a, b in zip(cands, cands[1:]))):
         hits.append("guess_verify")
@@ -128,7 +141,11 @@ def class_distribution(annots: list[dict]) -> dict:
     c = Counter(a["strategy_class"] for a in annots); tot = max(1, len(annots))
     return {k: c[k] / tot for k in CLASSES}
 
-def shortcut_rate(thinks, prompts, n, d, legacy_gv: bool = False, legacy_pe: bool = False) -> dict:
-    hs = [detect_shortcuts(t, p, n, d, legacy_gv, legacy_pe) for t, p in zip(thinks, prompts)]
+def shortcut_rates_all(thinks, prompts, n, d) -> dict:
+    """四种定义的命中率（描述量）。"""
+    return {v: shortcut_rate(thinks, prompts, n, d, version=v) for v in VERSIONS}
+
+def shortcut_rate(thinks, prompts, n, d, legacy_gv: bool = False, legacy_pe: bool = False, version: str = "D13") -> dict:
+    hs = [detect_shortcuts(t, p, n, d, legacy_gv, legacy_pe, version) for t, p in zip(thinks, prompts)]
     c = Counter(h for hh in hs for h in set(hh)); tot = max(1, len(hs))
     return dict(any=sum(1 for hh in hs if hh) / tot, by_type={k: c[k] / tot for k in ("ir_copy_order", "perm_enum", "assign_enum", "guess_verify")}, n=len(hs))

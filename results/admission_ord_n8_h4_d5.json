@@ -1,0 +1,250 @@
+{
+ "key": "ord_n8_h4_d5",
+ "n": 500,
+ "backend": "vllm",
+ "chance": 0.0005952380952380953,
+ "direct": 0.0045,
+ "native": 0.608,
+ "native_clean": 0.608,
+ "native_viol_rate": 0.0,
+ "native_forced_rate": 0.378,
+ "M": 8599.5,
+ "L_median": 8599.5,
+ "budget_curve": {
+  "0.1": 0.004,
+  "0.25": 0.026,
+  "0.5": 0.226,
+  "0.75": 0.44,
+  "1.0": 0.55
+ },
+ "filler_curve": {
+  "0.1": 0.004,
+  "0.25": 0.0,
+  "0.5": 0.002,
+  "0.75": 0.002,
+  "1.0": 0.004
+ },
+ "transplant_acc": 0.0,
+ "masked_frozen_acc": 0.006,
+ "native_gloss": null,
+ "template_hit_rate": 0.06,
+ "oracle_lb": {
+  "2": 24.0,
+  "2.5": 30.0,
+  "3": 36.0
+ },
+ "S_dist": {
+  "1": 473,
+  "2": 27
+ },
+ "target_S": null,
+ "native_lenient": 0.608,
+ "direct_lenient": 0.0045,
+ "direct_n": 2000,
+ "direct_stop500": 0.002,
+ "direct_format_err": 0.0,
+ "max_new_tokens_direct": 32,
+ "d": 5,
+ "transplant_pairing": "derangement",
+ "strategy_class_native": {
+  "english_case": 0.0,
+  "symbolic_case": 0.0,
+  "propagation": 0.0,
+  "enumeration": 0.0,
+  "mixed_probe_enum": 1.0,
+  "path_stitching": 0.0,
+  "other": 0.0
+ },
+ "shortcut_by_type": {
+  "ir_copy_order": 0.0,
+  "perm_enum": 0.006,
+  "assign_enum": 0.02,
+  "guess_verify": 0.04
+ },
+ "shortcut_legacy_r4": {
+  "any": 0.922,
+  "by_type": {
+   "ir_copy_order": 0.042,
+   "perm_enum": 0.148,
+   "assign_enum": 0.02,
+   "guess_verify": 0.906
+  }
+ },
+ "kahn_lb": {
+  "2": 24.0,
+  "2.5": 30.0,
+  "3": 36.0
+ },
+ "decision_lb": {
+  "2": 26.0,
+  "2.5": 32.5,
+  "3": 39.0
+ },
+ "pairwise_direct": 0.6120357142857142,
+ "pairwise_baseline": 0.6664116273706452,
+ "decision": {
+  "admitted": true,
+  "pending": [],
+  "checks": {
+   "1_direct_le_2x_2^-d": {
+    "ok": true,
+    "direct": 0.0045,
+    "direct_lenient": 0.0045,
+    "d": 5,
+    "threshold": 0.0625,
+    "direct_n": 2000,
+    "chance_1_over_LE_reported_only": 0.0005952380952380953,
+    "pairwise_direct": 0.6120357142857142,
+    "pairwise_baseline": 0.6664116273706452
+   },
+   "2_native_in_window": {
+    "ok": true,
+    "native": 0.608,
+    "native_lenient": 0.608
+   },
+   "3_min_budget_ge_0.5M": {
+    "ok": true,
+    "min_budget_frac": ">1.0",
+    "target": 0.5579999999999999
+   },
+   "4_filler_not_within_10pp": {
+    "ok": true,
+    "offending_fracs": [],
+    "compared_fracs": [
+     0.5,
+     0.75,
+     1.0
+    ]
+   },
+   "5_transplant_drop_ge_half_to_direct": {
+    "ok": true,
+    "drop": 0.608,
+    "required": 0.30175
+   },
+   "6_masked_frozen_le_direct+10pp": {
+    "ok": true,
+    "masked_frozen_acc": 0.006
+   },
+   "7_template_audit_lt_5pct": {
+    "ok": true,
+    "audit_template_rate": 0.0,
+    "audit_file": "results/audit_criterion7_ord_n8_h4_d5.md",
+    "detector_rates_descriptive": {
+     "r4": {
+      "any": 0.922,
+      "by_type": {
+       "ir_copy_order": 0.042,
+       "perm_enum": 0.148,
+       "assign_enum": 0.02,
+       "guess_verify": 0.906
+      },
+      "n": 500
+     },
+     "D9": {
+      "any": 0.258,
+      "by_type": {
+       "ir_copy_order": 0.042,
+       "perm_enum": 0.148,
+       "assign_enum": 0.02,
+       "guess_verify": 0.072
+      },
+      "n": 500
+     },
+     "D12": {
+      "any": 0.132,
+      "by_type": {
+       "ir_copy_order": 0.042,
+       "perm_enum": 0.006,
+       "assign_enum": 0.02,
+       "guess_verify": 0.072
+      },
+      "n": 500
+     },
+     "D13": {
+      "any": 0.06,
+      "by_type": {
+       "ir_copy_order": 0.0,
+       "perm_enum": 0.006,
+       "assign_enum": 0.02,
+       "guess_verify": 0.04
+      },
+      "n": 500
+     }
+    },
+    "detector_rate_D13": 0.06
+   },
+   "8_M_ge_5x_kahn_c2.5": {
+    "ok": true,
+    "M": 8599.5,
+    "kahn_lb_c2_5": 30.0,
+    "ratio_kahn_c2_5": 286.65,
+    "kahn_lb": {
+     "2": 24.0,
+     "2.5": 30.0,
+     "3": 36.0
+    },
+    "decision_lb": {
+     "2": 26.0,
+     "2.5": 32.5,
+     "3": 39.0
+    },
+    "ratio_decision_c2_5": 264.6
+   },
+   "0_generator_S_ge_1": {
+    "ok": true,
+    "S_dist": {
+     "1": 473,
+     "2": 27
+    }
+   }
+  },
+  "info": {
+   "native_gloss": null
+  }
+ },
+ "shortcut_rates": {
+  "r4": {
+   "any": 0.922,
+   "by_type": {
+    "ir_copy_order": 0.042,
+    "perm_enum": 0.148,
+    "assign_enum": 0.02,
+    "guess_verify": 0.906
+   },
+   "n": 500
+  },
+  "D9": {
+   "any": 0.258,
+   "by_type": {
+    "ir_copy_order": 0.042,
+    "perm_enum": 0.148,
+    "assign_enum": 0.02,
+    "guess_verify": 0.072
+   },
+   "n": 500
+  },
+  "D12": {
+   "any": 0.132,
+   "by_type": {
+    "ir_copy_order": 0.042,
+    "perm_enum": 0.006,
+    "assign_enum": 0.02,
+    "guess_verify": 0.072
+   },
+   "n": 500
+  },
+  "D13": {
+   "any": 0.06,
+   "by_type": {
+    "ir_copy_order": 0.0,
+    "perm_enum": 0.006,
+    "assign_enum": 0.02,
+    "guess_verify": 0.04
+   },
+   "n": 500
+  }
+ },
+ "criterion7_recomputed": "D13, detector rates from stored native trajectories (no regeneration)",
+ "audit_template_rate": 0.0,
+ "audit_file": "results/audit_criterion7_ord_n8_h4_d5.md"
+}

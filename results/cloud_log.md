@@ -114,3 +114,9 @@
 - 命中 66 条的构成：只 guess_verify 32、只 ir_copy_order 20、只 assign_enum 8、只 perm_enum 2、assign_enum+guess_verify 2、ir_copy_order+guess_verify 1、perm_enum+guess_verify 1
 - 命中 × 结局：自然结束且答对 31、自然结束答错 6、强制收尾答对 8、强制收尾答错 21
 - **第 7 条仍不过（13.2% ≥ 5%）→ 准入未通过；未写正式 admission json；未开机、未启动 A1。** 其余 7 条不变（M = 8599.5）。
+
+## 2026-09-19 第二次迁移 + D13 + 正式准入
+- pod 迁移：新 pod `2dy8hd8l24yo24`（letter-tax-migration，A100 SXM 80GB，195.26.233.65:20967）；/workspace 完整（cot-compress 含 .venv 15G、hf 7.6G、.uv-cache、.runpod、bin/runpodctl、logs），无需重建；~/.runpod 软链重建；`runpodctl get pod` 可见新 pod RUNNING、旧 pod jhlv0ja6xynmy3 EXITED；pod 上 HEAD 是 4f43f03（D12 / D13 是迁移后才推上去的）。
+- 审计（66 条被 D12 标中的轨迹全读）：模板 / 抄答案 0、正常 50、瞎搭 16；未标中的 434 条未读。audit_template_rate = 0.000。
+- 检测器命中率（描述量，500 条）：r4 any 0.922（ir 0.042 / perm 0.148 / assign 0.020 / gv 0.906）｜D9 0.258（gv 0.072）｜D12 0.132（perm 0.006）｜D13 **0.060**（ir 0.000 / perm 0.006 / assign 0.020 / gv 0.040）
+- **(8,4,5) cap 10240 准入通过（八条全过）**，正式 `results/admission_ord_n8_h4_d5.json`，**M = 8599.5**。

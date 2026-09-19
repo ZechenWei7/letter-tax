@@ -10,19 +10,24 @@ ITEM = dict(id="x", prompt=IR, answer="0 1 2 3", meta=dict(n=4, d=2, sigma=[0, 1
 
 def test_shortcut_detectors():
     n, d = 4, 2
-    assert SC.detect_shortcuts("0<1 2<3 (1<2)|(3<0) (0<2)|(1<3) hence 0 1 2 3", IR, n, d) == ["ir_copy_order"]
+    assert SC.detect_shortcuts("0<1 2<3 (1<2)|(3<0) (0<2)|(1<3) : 0 1 2 3", IR, n, d) == ["ir_copy_order"]
     assert SC.detect_shortcuts("there are 4! = 24 orders, check all permutations", IR, n, d) == ["perm_enum"]
     assert "perm_enum" in SC.detect_shortcuts("\n".join(f"{a} {b} {c} {e}" for a, b, c, e in __import__("itertools").permutations(range(4))), IR, n, d)
     perms8 = [" ".join(map(str, q)) for q in list(__import__("itertools").permutations(range(4)))[:8]]
     reasoned_pe = "\n".join(f"so then {q}" for q in perms8)                           # D12：8 个不同顺序，但每次切换之间都有传播标记
     assert "perm_enum" not in SC.detect_shortcuts(reasoned_pe, IR, n, d) and "perm_enum" in SC.detect_shortcuts(reasoned_pe, IR, n, d, legacy_pe=True)
     assert len(SC.unreasoned_orders("\n".join(perms8), 4)) == 8 and SC.unreasoned_orders(reasoned_pe, 4) == set()
+    inv = "order 2 3 0 1 check ok.\nThe events are 0,1,2,3. Yes, all valid.\nFinal 2 3 0 1 holds. Again 2 3 0 1 valid."      # D13：事件清点 / 恒等排列不是候选
+    assert SC.detect_shortcuts(inv, IR, n, d) == [] and SC.detect_shortcuts(inv, IR, n, d, version="D12") == ["guess_verify"]
+    chk = "0<1 2<3 (1<2)|(3<0) (0<2)|(1<3)\n(1<2)|(3<0): so 1<2 is true, therefore fine. hence 0 1 2 3"                 # D13：抄写与最终顺序之间有推理标记
+    assert SC.detect_shortcuts(chk, IR, n, d) == [] and SC.detect_shortcuts(chk, IR, n, d, version="D12") == ["ir_copy_order"]
+    assert set(SC.shortcut_rates_all([inv, chk], [IR, IR], n, d)) == set(SC.VERSIONS)
     assert SC.detect_shortcuts("assignments 00 01 10 11: try each", IR, n, d) == ["assign_enum"]
     assert SC.detect_shortcuts("case 1 ... case 2 ... use a Gray code over sides", IR, n, d) == ["assign_enum"]
     assert SC.detect_shortcuts("case 1: a. case 2: b. case 3: c. case 4: d.", IR, n, d) == ["assign_enum"] and SC.detect_shortcuts("case 1: a. case 2: b.", IR, n, d) == []
     assert SC.detect_shortcuts("0<1 2<3 restated; hence 0 1 2 3", IR, n, d) == []        # 只复述硬约束不算抄写
     assert SC.detect_shortcuts("try both sides; try both again", IR, n, d) == ["assign_enum"]
-    gv = "guess 0 1 2 3 check ok;\nguess 2 3 0 1 check fails;\nguess 0 2 1 3 verify fails"
+    gv = "guess 1 0 2 3 check ok;\nguess 2 3 0 1 check fails;\nguess 0 2 1 3 verify fails"
     assert SC.detect_shortcuts(gv, IR, n, d) == ["guess_verify"]                       # 三个不同候选、之间无推理标记
     restate = "The order is 0 1 2 3. check ok.\nLet me verify: 0 1 2 3 holds.\nFinal: 0 1 2 3 valid."
     assert SC.detect_shortcuts(restate, IR, n, d) == []                               # D9：同一顺序的重述 / 复核不算
