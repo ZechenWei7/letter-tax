@@ -120,3 +120,10 @@
 - 审计（66 条被 D12 标中的轨迹全读）：模板 / 抄答案 0、正常 50、瞎搭 16；未标中的 434 条未读。audit_template_rate = 0.000。
 - 检测器命中率（描述量，500 条）：r4 any 0.922（ir 0.042 / perm 0.148 / assign 0.020 / gv 0.906）｜D9 0.258（gv 0.072）｜D12 0.132（perm 0.006）｜D13 **0.060**（ir 0.000 / perm 0.006 / assign 0.020 / gv 0.040）
 - **(8,4,5) cap 10240 准入通过（八条全过）**，正式 `results/admission_ord_n8_h4_d5.json`，**M = 8599.5**。
+
+## 2026-09-19 A1 正式 run（阶段 1 链，D14）—— 第 1 个训练步崩溃，链按 --strict 停机
+- 启动 22:22 UTC：`scripts/chain_stage1.sh`（setsid nohup），A_0.5_ord_n8_h4_d5_s1，λ=0.5，M=8599.5，cap 10240，G=16，max_steps 400，HEAD 37d49d2。
+- step-0 eval（stop 500，55.5 min）：acc **0.624**（clean 0.624，宽松 0.624，viol 0），L_mean **8219.0**，L_median **8586.5**，capped / forced 0.394，acc@1024 0.008，fmt_err 0，letter_frac 0.787，mask_frac 0.407，ref_ppl 2.75，hit_hamming2 0.634；direct（2000 题）**0.004**，frozen_direct 0.0045，残留阈值 0.314。与准入（native 0.608、M 8599.5）一致。
+- eval 后显存：reserved 43.47 GiB、alloc 42.70 GiB。
+- **第 1 个训练步的 backward 报 `torch.AcceleratorError: CUDA error: invalid argument`**（23:25 UTC，train_rc=1；不是 OOM）。没有写出任何 steps.jsonl 行，没有 checkpoint。`run_matrix --strict` → `results/matrix_halt.json`（"A_0.5_ord_n8_h4_d5_s1: train_rc=1 diag_rc=None"）→ `pod_stop.sh --delay 300`。未重试、未改任何设置。
+- 环境差异：迁移后的新宿主机 driver **595.91.07**（上一台 580.159.04，那台上同一代码 / 同一 venv 的 20 步 dry-run 与 T2 都跑通）。代码差异：正式 run 先做 step-0 eval 再训练（dry-run 无 eval）、M 来自准入（dry-run 是 m_override 8192）。`None of the inputs have requires_grad=True` 警告在跑通的 dry-run 日志里同样出现，不是原因。根因未定位（需要 CUDA_LAUNCH_BLOCKING=1 复现）。
