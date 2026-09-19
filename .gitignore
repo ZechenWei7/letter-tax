@@ -12,3 +12,5 @@ results/cups_archive/
 *.jsonl.zst
 tb/
 *:Zone.Identifier
+ops/dashboard.html
+ops/dashboard_demo_FAKE.html

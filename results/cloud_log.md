@@ -127,3 +127,11 @@
 - eval 后显存：reserved 43.47 GiB、alloc 42.70 GiB。
 - **第 1 个训练步的 backward 报 `torch.AcceleratorError: CUDA error: invalid argument`**（23:25 UTC，train_rc=1；不是 OOM）。没有写出任何 steps.jsonl 行，没有 checkpoint。`run_matrix --strict` → `results/matrix_halt.json`（"A_0.5_ord_n8_h4_d5_s1: train_rc=1 diag_rc=None"）→ `pod_stop.sh --delay 300`。未重试、未改任何设置。
 - 环境差异：迁移后的新宿主机 driver **595.91.07**（上一台 580.159.04，那台上同一代码 / 同一 venv 的 20 步 dry-run 与 T2 都跑通）。代码差异：正式 run 先做 step-0 eval 再训练（dry-run 无 eval）、M 来自准入（dry-run 是 m_override 8192）。`None of the inputs have requires_grad=True` 警告在跑通的 dry-run 日志里同样出现，不是原因。根因未定位（需要 CUDA_LAUNCH_BLOCKING=1 复现）。
+
+## 2026-09-19 23:50 UTC 接管：planning-led 成为唯一会话（D17）
+- 用户指示接管。execution 的链已结束（A1 崩停）；它的最后一个任务 = 排查第 1 步（3 步 dry-run、不带 eval），报完即退休。在该结果转来之前，planning-led 不对 pod 做写操作、不 push。接管记录与常设规则见 `ops/state.md`。
+- 提交重叠期积压的文档改动：`docs/paper.md`（七处与现行协议对齐，逐处行内标注 deviation 并保留预注册原文；§6.1 与 §6.2 成本部分按本日志与准入 json 填入；§9 决策史）、`ops/`（state.md、to_execution.md、只读看板 dashboard.py）、`docs/roles.md`。不涉及代码与判定。
+- **更正（本日志上文的笔误）**：2026-09-19 准入 (8,4,5)@cap 10240 一条里写的 "M / (5×Kahn 30) = 286.7×" 应为 **M / Kahn = 8599.5 / 30 = 286.7×**（M / (5×Kahn) = 57.3×）；"决策下限 32.5 → 264.6×" 同为 M / 决策下限。第 8 条判据是 M ≥ 5×Kahn，结论（通过）不变。原文保留不改，以本条为准。
+- **费率（D18）**：`configs/cloud_4b.yaml` `cost.usd_per_hour` 1.9 → 1.6。pod 实际单价 $1.59/h；用户定 stage-1 的 $200 线与 $300 上限的投影都按 $1.6/h 判（本日志的 $571 投影原本就按 1.6 算）。`budget_usd: 300` 未动。`run_matrix.py` / `cost.py` 里配置缺省时的回退值 1.9 未改（配置里有值，走不到）。
+- **A1 重跑的锚点（用户 2026-09-19 定，先于任何重跑数字）**：崩溃那次的 run 目录另存备查；重跑用干净目录；操纵门以重跑自己的 step-0 eval 为锚点；两次 step-0 的数都报（崩溃那次：acc 0.624 / L_mean 8219 / L_median 8586.5 / 强制收尾 39.4%）。
+- **修复方式的边界（用户定）**：vLLM sleep mode / colocate 下 eval↔训练切换、驱动 / 库版本一类 → 工程修复，记 log；“训练前不跑 step-0 eval”“改 eval 的 n”或改 eval 划分 / 温度 / 频率 → 动到操纵门锚点与停止判据的数据来源，先停下问用户。
