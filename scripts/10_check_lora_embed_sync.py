@@ -19,7 +19,9 @@ os.environ.setdefault("COT_NO_UNSLOTH", "1")
 import argparse, json, gc, statistics, time
 import torch
 
-PROMPTS = ["The capital of France is", "Compute 17 * 23. Answer:", "List three prime numbers:", "def fib(n):\n    return"]
+PROMPTS = ["The capital of France is", "Compute 17 * 23. Answer:", "List three prime numbers:", "def fib(n):\n    return",
+           "n=8\nhard: 2<4 1<5 1<4 6<0\ndisj: (6<7)|(3<1) (5<7)|(4<0) (0<3)|(6<3) (7<6)|(3<6) (5<2)|(4<3)\nreason inside <think>, then give the order\nanswer: 8 digits, first to last",
+           "» 3<0 → 2<3<0<1 ⇒ × ⇒ 1<2 ⇒ 0<1<2<3 ✓ 0<2 + ⇒ 0 1 2 3"]
 
 def trl_sync(peft_model, llm, adapter_prefix="lora_"):
     """镜像 TRL 0.25.1 _move_model_to_vllm（PEFT，非 FSDP/ZeRO-3 分支）。返回同步的参数名列表。"""
@@ -102,11 +104,22 @@ def run_variant(name, model_dir, targets, args, report):
     delta_hf = max_abs_diff(ref, base_only)
     llm = LLM(model=model_dir, dtype="bfloat16", gpu_memory_utilization=args.gpu_util, max_model_len=512, enforce_eager=True,
               distributed_executor_backend="external_launcher", seed=0)
-    before = max_abs_diff(vllm_logps(llm, PROMPTS), ref)
+    v_before = vllm_logps(llm, PROMPTS); before = max_abs_diff(v_before, ref)
     loaded = trl_sync(peft_model, llm)
-    after = max_abs_diff(vllm_logps(llm, PROMPTS), ref)
+    v_after = vllm_logps(llm, PROMPTS); after = max_abs_diff(v_after, ref)
     ok = after[0] < args.tol
+    # D3 追加诊断（不改原判定 ok）：跨引擎 bf16 噪声在"改动量"上一阶抵消。
+    #   noise_floor = vLLM(基座) vs HF(基座)；delta_agreement = (vLLM 同步后 − 同步前) vs (HF 合并 − HF 基座) 的逐 token 差；delta_corr = 两个改动量的相关系数
+    noise = max_abs_diff(v_before, base_only)
+    d_v = [[a - b for a, b in zip(ra, rb)] for ra, rb in zip(v_after, v_before)]; d_h = [[a - b for a, b in zip(ra, rb)] for ra, rb in zip(ref, base_only)]
+    agree = max_abs_diff(d_v, d_h)
+    pairs = [(x, y) for rv, rh in zip(d_v, d_h) for x, y in zip(rv, rh) if x == x and y == y]
+    fv = [x for x, _ in pairs]; fh = [y for _, y in pairs]
+    mv, mh = statistics.mean(fv), statistics.mean(fh)
+    den = (sum((x - mv) ** 2 for x in fv) * sum((y - mh) ** 2 for y in fh)) ** 0.5
+    corr = (sum((x - mv) * (y - mh) for x, y in zip(fv, fh)) / den) if den else None
     rec = dict(targets=targets, model_dir=model_dir, hf_delta_vs_base=delta_hf, vllm_vs_hf_before_sync=before, vllm_vs_hf_after_sync=after,
+               noise_floor_vllm_base_vs_hf_base=noise, delta_agreement=agree, delta_corr=corr, vllm_delta_max=max(abs(x) for x in fv),
                synced_names_sample=[n for n in loaded if any(k in n for k in ("embed_tokens", "lm_head"))][:6], ok=ok)
     print(json.dumps(rec, indent=1), flush=True)
     report["variants"][name] = rec
