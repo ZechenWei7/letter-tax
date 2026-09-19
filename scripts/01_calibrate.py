@@ -104,6 +104,7 @@ def main():
     ap.add_argument("--admission", action="store_true", help="v7 准入：对 --keys 各格在冻结模型上跑 8 项检查（stopping-eval 500 题），写 results/admission_<key>.json")
     ap.add_argument("--backend", choices=["hf", "vllm"], default="hf", help="准入生成后端；vllm 比 HF generate 快约 10×（n≥500 × 多格时必需）")
     ap.add_argument("--gpu-util", type=float, default=0.85)
+    ap.add_argument("--direct-only", action="store_true", help="D6：只重测直接作答（direct-check 2000 + stop 500 + 逐对诊断），写回已有的 results/admission_<key>.json 并重算判定；其余字段不动")
     ap.add_argument("--native-only", action="store_true", help="只重测 native 准确率 / M / 强制收尾率（如换 cap 后复核），写 results/retest_<key>_cap<cap>.json")
     args = ap.parse_args()
 
@@ -198,6 +199,20 @@ def run_admission(args):
         task = tasks.task_for_key(key); items = tasks.make_eval_set(key, n, seed=args.seed, **({"split": "stop"} if key.startswith(("kk_", "ord_")) else {}))
         chance = task.chance(key) if hasattr(task, "chance") else 0.0
         print(f"\n[admission] {key} n={n} chance={chance:.3f}", flush=True)
+        if args.direct_only:
+            out = pathlib.Path(f"results/admission_{key}.json"); metrics = json.load(open(out))
+            d_items = tasks.make_eval_set(key, 2000, split="direct")
+            d_rows = run_eval(model, tok, key, d_items, "direct", gen_cfg, seed=args.seed); ds = summarize(d_rows)
+            d500 = summarize(run_eval(model, tok, key, items, "direct", gen_cfg, seed=args.seed))["acc"]
+            pw = [task.pairwise_accuracy([int(x) for x in r["pred"].split()], it["meta"]["sigma"]) for r, it in zip(d_rows, d_items) if r.get("pred")]
+            pw = [x for x in pw if x is not None]
+            metrics["direct_before_D6_fix"] = dict(direct=metrics.get("direct"), direct_lenient=metrics.get("direct_lenient"), pairwise_direct=metrics.get("pairwise_direct"), note="max_new_tokens_direct=16 truncated every answer")
+            metrics.update(direct=ds["acc"], direct_lenient=ds["lenient_acc"], direct_n=len(d_rows), direct_stop500=d500, direct_format_err=ds["format_err"],
+                           pairwise_direct=(statistics.mean(pw) if pw else None), pairwise_direct_n=len(pw), max_new_tokens_direct=int(gen_cfg["max_new_tokens_direct"]))
+            metrics["decision"] = admission_decision(metrics)
+            write_rows(CALIB_DIR / f"admission_{key}__direct2000.jsonl", d_rows); json.dump(metrics, open(out, "w"), indent=1)
+            print(f"  [direct-only] {key} direct={ds['acc']:.4f} lenient={ds['lenient_acc']:.4f} fmt_err={ds['format_err']:.3f} stop500={d500:.4f} pairwise={metrics['pairwise_direct']} (n={len(pw)}) admitted={metrics['decision']['admitted']}", flush=True)
+            continue
         if args.native_only:
             direct_acc = summarize(run_eval(model, tok, key, items, "direct", gen_cfg, seed=args.seed))["acc"]      # 几秒钟，顺带记
             HOOK.enabled = True
@@ -287,6 +302,7 @@ def run_admission(args):
                        transplant_acc=transplant, masked_frozen_acc=masked, native_gloss=native_gloss, template_hit_rate=template_rate,
                        oracle_lb=oracle_lb, S_dist=S_dist, target_S=(task.parse_key(key)["s"] if key.startswith("kk_") else None),
                        native_lenient=nat_s["lenient_acc"], direct_lenient=summarize(d_rows)["lenient_acc"], direct_n=len(d_rows), direct_stop500=direct_stop500,
+                       direct_format_err=summarize(d_rows)["format_err"], max_new_tokens_direct=int(gen_cfg["max_new_tokens_direct"]),
                        d=(task.parse_key(key)["d"] if key.startswith("ord_") else None), transplant_pairing="derangement",
                        strategy_class_native=(strat if key.startswith("ord_") else None),
                        kahn_lb=(oracle_lb if key.startswith("ord_") else None), decision_lb=(decision_lb if key.startswith("ord_") else None),

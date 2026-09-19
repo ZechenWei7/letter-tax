@@ -27,6 +27,7 @@ generation:
   backend: vllm              # eval 也走 vLLM（HF generate 在 300 题 × 3k token 下每次 eval 约 20 min，vLLM 约 5 min）
   batch_size: 64
   eval_batch_size: 64
+  max_new_tokens_direct: 32  # D6（2026-09-19）：ordering 的直接作答要 18（n=8）/ 20（n=9）个 token（数字与空格各占一个 token + </answer> 3 个）；继承来的 16 会在 </answer> 前截断 → direct 恒为 0
   max_new_tokens_think: 5120 # = train.max_completion_length（cap 3072 是本地 8GB 遗留；云端 4096 → 5120：cups_n8_k20 在 5120 下强制收尾 11.8%，2026-09-17）
 train:
   num_generations: 16
