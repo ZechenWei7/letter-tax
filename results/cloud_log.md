@@ -135,3 +135,9 @@
 - **费率（D18）**：`configs/cloud_4b.yaml` `cost.usd_per_hour` 1.9 → 1.6。pod 实际单价 $1.59/h；用户定 stage-1 的 $200 线与 $300 上限的投影都按 $1.6/h 判（本日志的 $571 投影原本就按 1.6 算）。`budget_usd: 300` 未动。`run_matrix.py` / `cost.py` 里配置缺省时的回退值 1.9 未改（配置里有值，走不到）。
 - **A1 重跑的锚点（用户 2026-09-19 定，先于任何重跑数字）**：崩溃那次的 run 目录另存备查；重跑用干净目录；操纵门以重跑自己的 step-0 eval 为锚点；两次 step-0 的数都报（崩溃那次：acc 0.624 / L_mean 8219 / L_median 8586.5 / 强制收尾 39.4%）。
 - **修复方式的边界（用户定）**：vLLM sleep mode / colocate 下 eval↔训练切换、驱动 / 库版本一类 → 工程修复，记 log；“训练前不跑 step-0 eval”“改 eval 的 n”或改 eval 划分 / 温度 / 频率 → 动到操纵门锚点与停止判据的数据来源，先停下问用户。
+
+## 2026-09-19/20 排查第 1 步：3 步 dry-run、无 eval、CUDA_LAUNCH_BLOCKING=1（pod 2dy8hd8l24yo24，重启后 SSH 端口 39125，driver 595.91.07）
+- 命令：`train.py --arm A --dry-run --tag _dbg1_noeval --set reward.lambda=0.5 task.key=ord_n8_h4_d5 train.seed=1 train.dry_run_steps=3`，HEAD f46e47a；日志 `/workspace/logs/dbg1_noeval.log`。
+- **失败（rc=1），与 A1 同一处**：第 1 个训练步 `loss.backward()` → `torch.AcceleratorError: CUDA error: invalid argument`（同步模式下栈仍落在 autograd 引擎 `_engine_run_backward`，没有更具体的 kernel 帧）；生成阶段正常（after generate: reserved 43.47 GiB、alloc 42.70 GiB）；无 steps.jsonl。
+- 结论：不带 eval 也崩 → 不是"eval 之后接训练"的问题；按排查顺序判为**宿主机 / 驱动问题**（同一代码与 venv 在上一台 driver 580.159.04 的机器上跑通过 20 步）。下一步（未做）：控制台 migrate 换机器后重跑本命令确认；第 2 步（`train.dry_run_eval_n=32`，D16）未跑。
+- **交接（2026-09-20）**：execution 会话到此收尾、不再接任务；pod 仍在运行（未停机）、其上无任务在跑；后续全部操作由 planning 会话接管。本地后台等待器已全部停止。
