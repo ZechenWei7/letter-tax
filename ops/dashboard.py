@@ -64,8 +64,8 @@ def collect(pull, rate):
     rcs = {}
     for f in sorted((pull / "logs").glob("*.rc")):
         for line in f.read_text().splitlines():
-            m = re.match(r"^(?:(\S+)\s+)?rc=(-?\d+)", line.strip())
-            if m: rcs[f.stem + ("_" + m.group(1) if m.group(1) else "")] = dict(rc=int(m.group(2)), mtime=f.stat().st_mtime)
+            m = re.match(r"^(?:(\S+)\s+)?rc=(-?\d+|stopped\w*)", line.strip())
+            if m: rcs[f.stem + ("_" + m.group(1) if m.group(1) else "")] = dict(rc=(int(m.group(2)) if m.group(2).lstrip("-").isdigit() else "stopped"), mtime=f.stat().st_mtime)
     def rc_for(name):
         hit = [k for k in rcs if name.endswith("_" + k) or name == k]
         return (max(hit, key=len), rcs[max(hit, key=len)]) if hit else (None, None)
@@ -85,7 +85,7 @@ def collect(pull, rate):
             others.append(dict(name=f.stem, steps=[], evals=[], mtime=f.stat().st_mtime, rc=None, started=True))
     for o in others:
         o["age_min"] = (now - o["mtime"]) / 60
-        o["state"] = "crashed" if (o["rc"] not in (None, 0)) else ("done" if o["rc"] == 0 else ("running" if (o["age_min"] < 30 or (o.get("started") and o["age_min"] < 90)) else "unknown"))
+        o["state"] = "stopped" if o["rc"] == "stopped" else "crashed" if (o["rc"] not in (None, 0)) else ("done" if o["rc"] == 0 else ("running" if (o["age_min"] < 30 or (o.get("started") and o["age_min"] < 90)) else "unknown"))
     others.sort(key=lambda o: o["mtime"], reverse=True)
     for r in runs:                                                       # 链上的 run：matrix_halt.json 点名 → 崩
         hj = jf(pull / "results" / "matrix_halt.json")
@@ -211,7 +211,7 @@ def eval_table(r):
     return f'<h3 style="font-size:13px;margin:14px 0 4px">{esc(r["label"])} 的 eval 记录（表格视图）</h3><div class="scroll"><table><tr>{head}</tr>{body}</table></div>'
 
 
-STATE = dict(crashed=("崩溃", "bad"), done=("完成", "ok"), running=("进行中", "run"), unknown=("状态不明（无退出码、30 分钟没更新）", "warn"))
+STATE = dict(stopped=("人工停止", "warn"), crashed=("崩溃", "bad"), done=("完成", "ok"), running=("进行中", "run"), unknown=("状态不明（无退出码、30 分钟没更新）", "warn"))
 
 
 def one_run(o):

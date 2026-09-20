@@ -45,7 +45,7 @@ train:
   gradient_checkpointing: true       # HF 原生梯度检查点（TRL 路径）
   use_vllm: true
   vllm_mode: colocate
-  vllm_gpu_memory_utilization: 0.40  # D20（原 0.45）：KV 23.4 GiB = 170k token、并发 15.9；训练侧峰值 reserved 77.3 / 79.25 GiB（0.45 时 78.4，全冷编译后 backward 的分配器回收路径报 CUDA invalid argument）
+  vllm_gpu_memory_utilization: 0.35  # D20（原 0.45；0.40 验收过但余量仅约 2 GiB，用户定 0.35 以覆盖 400 步 / 27 h 的碎片增长）。0.45：KV 199k token、并发 18.5、reserved 78.4 / 79.25 GiB（全冷编译后 backward 的分配器回收路径报 CUDA invalid argument）；0.40：170k、15.9、77.3 GiB、503 s/步；0.35 的实测见 cloud_log
   save_every: 25                     # 云上可能被抢占：每 25 步存，run_matrix 自动 --resume
   save_total_limit: 2                # 只留最近 2 个 checkpoint；final/ 另存（B_seq 的 init_from 用）
   max_steps: 400                     # 或提前停止：连续两个 50 步区间 ΔL_mean<5% 且 Δacc<4pp
