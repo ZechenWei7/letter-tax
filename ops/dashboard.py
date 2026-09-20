@@ -14,7 +14,7 @@ import argparse, html, json, pathlib, re, time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 KEY, LAM, MAX_STEPS, EVAL_EVERY = "ord_n8_h4_d5", 0.5, 400, 50
 CHAIN = [("A1", f"A_{LAM}_{KEY}_s1", "rl"), ("B_warm-SFT(A1)", f"Bwarm_sft_{KEY}_s1", "sft"), ("B1", f"B_{LAM}_{KEY}_s1", "rl")]
-STAGE1_LINE, BUDGET = 200.0, 300.0
+STAGE1_LINE, BUDGET = 240.0, 300.0   # stage-1 内部线：用户 2026-09-20 由 $200 放宽到 $240（$200 漏算了 eval）；$300 = 预注册硬上限
 
 
 def jl(p):
