@@ -42,3 +42,7 @@
   - 指向 vLLM sleep mode / colocate 下 eval↔训练的切换（显存让出 / 唤醒、权重同步顺序、库版本）→ 工程修复，记 log 即可。
   - 修复方式是"训练前不跑 step-0 eval"或"改 eval 的 n"（或任何改变 eval 划分 / 温度 / 频率以绕开崩溃的做法）→ 动到操纵门的锚点与停止判据的数据来源（step-0 计入判定历史），**先停下问用户**，不自行采纳。
 - 费率 1.9 → 1.6 的指令留在 `ops/to_execution.md` #2，**排查结束后**再随其它指令一起转发，现在不打断排查。
+
+## 用户预先定的修复授权与验收（2026-09-20，dbg4 结果出来之前）
+1. **授权**：`train.vllm_gpu_memory_utilization` 0.45 → 0.35~0.40 属工程修复，planning-led 可直接做，记 log。**不动**：批大小 2×16、cap、reward、LoRA、eval 划分。理由：预注册没写显存划分；reserved 一直贴 78.4 / 79.25 GiB 是唯一有实测支持的嫌疑。
+2. **验收**：栈指向分配器 / 显存 → 修完后在这台机器上**连续 10 步不崩**（带一次小 eval，D16 的 `train.dry_run_eval_n`，确认 eval→训练切换在新 util 下也稳）→ 再重跑 A1。降了 util 还崩，或栈指不出原因 → 迁移；新机器用 `ops/host_check.py` + 10 步 dry-run（同样带小 eval）验收。

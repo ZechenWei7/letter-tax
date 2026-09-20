@@ -60,13 +60,19 @@ def collect(pull, rate):
         left = MAX_STEPS - r["step"]
         ev_left = MAX_STEPS // EVAL_EVERY + 1 - len(r["evals"])
         remain_h += (left * step_sec + max(ev_left, 0) * ev_min * 60) / 3600
+    chain_names = {n for _, n, _ in CHAIN}; others = []                  # 链以外的 run（排查 / 验收用的 dry-run）：只列最近更新的几个
+    for rd in sorted((pull / "runs").glob("*"), key=lambda d: (d / "steps.jsonl").stat().st_mtime if (d / "steps.jsonl").exists() else 0, reverse=True):
+        st = jl(rd / "steps.jsonl")
+        if rd.name in chain_names or not st: continue
+        others.append(dict(name=rd.name, steps=st, evals=jl(rd / "eval.jsonl"), age_min=(now - (rd / "steps.jsonl").stat().st_mtime) / 60))
+    others = others[:6]
     halt, done = jf(pull / "results" / "matrix_halt.json"), (pull / "results" / "CHAIN_DONE").exists()
     warm = jf(pull / "results" / f"warm_decision_{KEY}.json")
     mlog = pull / "results" / "matrix_log.md"
     return dict(generated=time.strftime("%Y-%m-%d %H:%M:%S %Z"), rate=rate, runs=runs, kahn2=(2 * kahn if kahn else None), kill=(1.5 * dec if dec else None),
                 frozen_direct=adm.get("direct"), M=adm.get("M"), spent_h=spent_h, remain_h=remain_h, step_sec=step_sec, ev_min=ev_min,
                 step_sec_measured=bool(all_steps), ev_min_measured=bool(all_ev), halt=halt, chain_done=done, warm=warm,
-                matrix_log=(mlog.read_text().splitlines()[-12:] if mlog.exists() else []), stage1_line=STAGE1_LINE, budget=BUDGET)
+                others=others, matrix_log=(mlog.read_text().splitlines()[-12:] if mlog.exists() else []), stage1_line=STAGE1_LINE, budget=BUDGET)
 
 
 CSS = """
@@ -179,6 +185,19 @@ def eval_table(r):
     return f'<h3 style="font-size:13px;margin:14px 0 4px">{esc(r["label"])} 的 eval 记录（表格视图）</h3><div class="scroll"><table><tr>{head}</tr>{body}</table></div>'
 
 
+def others_html(d):
+    if not d["others"]: return '<div class="empty">cloud_pull/ 里没有链以外的 run</div>'
+    out = ""
+    for o in d["others"]:
+        rows = "".join(f"<tr><td>{s.get('step')}</td><td>{s.get('sec', 0):.0f}</td><td>{s.get('gen_sec', 0):.0f}</td><td>{s.get('train_sec', 0):.0f}</td>"
+                       f"<td>{'–' if s.get('reward_acc') is None else format(s['reward_acc'], '.2f')}</td><td>{'–' if s.get('L_mean') is None else format(s['L_mean'], '.0f')}</td>"
+                       f"<td>{'–' if s.get('natural_end') is None else format(s['natural_end'], '.2f')}</td><td>{s.get('peak_reserved_gib', '–')}</td></tr>" for s in o["steps"])
+        ev = "；".join(f"eval@{e.get('step')}: acc {e.get('acc')}, L_mean {e.get('L_mean')}, n {e.get('n')}" for e in o["evals"])
+        out += (f'<div class="card" style="margin-bottom:12px"><h3>{esc(o["name"])}</h3><p class="cs">已完成 {len(o["steps"])} 步 · 本地文件 {o["age_min"]:.0f} 分钟前更新{(" · " + esc(ev)) if ev else ""}</p>'
+                f'<div class="scroll"><table><tr><th>step</th><th>秒</th><th>生成秒</th><th>训练秒</th><th>reward_acc</th><th>L_mean</th><th>自然结束率</th><th>峰值 reserved GiB</th></tr>{rows}</table></div></div>')
+    return out
+
+
 def render(d):
     runs = d["runs"]; rate = d["rate"]
     cur = next((r for r in runs if r["exists"] and not r["done"]), None)
@@ -227,6 +246,8 @@ def render(d):
 <h2>4 · B1 对 A1（warm 判定用的数）</h2><p class="sub">预注册：B1 在 ≤ 200 步的最佳 eval acc &lt; A1 最佳 − 15pp → cold-start failure → B_warm-RL 进入待跑。</p>{leg}
 <div class="grid"><div class="card"><h3>eval acc：A1 与 B1</h3><p class="cs">x = 各自的训练步</p><div id="w_acc"></div></div>
 <div class="card"><h3>matrix_log.md 末尾</h3><p class="cs">run_matrix 自己写的记录（门 / warm 判定的正式输出在这里）</p><pre>{esc(chr(10).join(d["matrix_log"])) or "（还没有）"}</pre></div></div>
+
+<h2>5 · 排查 / 验收 run（链以外的 dry-run，最近 6 个）</h2><p class="sub">不是实验数据；一个 run 的步数停在预期之前且长时间不更新 = 崩了或还在跑，以 cloud_log 为准。</p>{others_html(d)}
 
 <h2>表格视图</h2>{eval_table(a1)}{eval_table(b1)}
 <div id="tip"></div><script type="application/json" id="data">{data}</script><script>{JS}</script></main></body></html>"""
