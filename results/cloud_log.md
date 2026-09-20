@@ -159,3 +159,32 @@
 - 02:09 UTC 启动验收 acc1（`logs/acc1.sh`）：seed 1、准入 M、`train.vllm_gpu_memory_utilization=0.40`（命令行覆盖，配置文件暂不改，过了再改）、`train.dry_run_steps=10`、`train.dry_run_eval_n=32`、生产条件（不开 CUDA_LAUNCH_BLOCKING；开 TORCH_SHOW_CPP_STACKTRACES 以便万一崩了有栈）。选 0.40 而不是 0.35：训练侧多出约 4 GiB 余量，vLLM KV 少约 4 GiB（并发约 18 → 15 条），生成变慢的代价较小；实测步时见结果。
 - **验收方案（用户 2026-09-20 定，取代上面"单次连续 10 步"的执行方式）**：acc1（10 步 + 小 eval）之后再做 3 次"只跑 1 步"的独立启动，专测进程首步；加上 acc1 的首步共 4 个首步。判据：4 个首步全过 → 认为降 util 有效，util 0.40 写进配置并记 deviation，直接重跑 A1（首步再崩 → 视为无效，转迁移）；任何一次崩 → 降 util 无效，转迁移（新机器：host_check + 同样的验收）。依据：不降 util 时首步 5 崩 2，"无效"假设下 4 次全过的概率约 13%。pod 上 `logs/acc2.sh` 已排在 acc1 之后自动执行（acc1 失败则跳过；三次里任何一次非零退出即停）。acc1 实测：util 0.40 → KV 170,448 token、并发 15.85 条（0.45 时 199,296 / 18.5）。
 - **watcher + 看板（D19，本地，不占 GPU）**：`setup/auto_pull.sh` 增加每 600 s 固定拉一次曲线文件（`runs/*/steps.jsonl`、`eval.jsonl`、`designated_ckpt.json`、`uninterpretable.json`、`results/matrix_log.md`、`matrix_halt.json`、`CHAIN_DONE`、`results/*.json`；不含 `*.zst`、`reward_log.jsonl`、checkpoint），原有"eval / matrix_log / 准入 json 变化 → 完整 pull"不变。02:18 UTC 起本地 watcher 与 `ops/dashboard.py --watch 120` 以 setsid nohup 常驻（日志 `cloud_pull/auto_pull.log`、`cloud_pull/dashboard.log`）。看板加第 5 块：链以外的排查 / 验收 run 的逐步表。新增排查工具 `ops/host_check.py`、`ops/train_anomaly.py`（均不改训练代码）。
+- 03:41 UTC **acc1 通过**（rc=0）：训练前小 eval（n=32：acc 0.5625，L_mean 8678，4.6 min）→ 10 个训练步全过。util 0.40、生产条件。每步 455–552 s，均值 **503 s**（gen 237 + train 266；util 0.45 的 dry-run 是 494 s = 218 + 276）→ 降 util 的吞吐代价约 2%。峰值 alloc 70.0–70.5 GiB、**reserved 77.2–77.3 GiB**（0.45 时 78.4–78.5）→ 离 79.25 的余量从约 0.8 GiB 变成约 2.0 GiB。KV 23.41 GiB = 170,448 token，并发 15.85。第 1 个首步：过。acc2（3 次单步启动）已自动接上。
+- 04:13 UTC **acc2：3 次单步启动全过**（rc=0 ×3；每次 477 s；reserved 76.82 GiB）。按用户定的判据，4 个首步全过。**但这 4 个首步不构成对"降 util 有效"的检验，如实记录：**
+  1. 三次 acc2 的首个 batch 逐位相同（reward_acc 0.8125、L_mean 7737.625），且与 dbg3、dbg4（util 0.45）的首个 batch 相同——同一 seed、不带 eval 时采样是确定的。所以它们不是 3 个独立的首步样本。
+  2. 同一条命令的 dbg1 采样却不同（sumL 250,353 vs 247,604）。查日志找到了原因，也找到了把全部 9 次启动完全分开的变量——**vLLM 的 torch.compile 缓存是冷还是热**（缓存在容器盘 `/root/.cache/vllm/torch_compile_cache`，pod 每次 stop 都会清空）：
+     | run | util | 编译缓存 | 结果 |
+     |---|---|---|---|
+     | A1 正式（开机后第一个进程） | 0.45 | 冷（"Compiling a graph … 32.6 s"） | **崩** |
+     | dbg1（再次开机后第一个进程） | 0.45 | 冷（33.4 s） | **崩** |
+     | dbg2 / dbg3 / dbg4 | 0.45 | 热（"Directly load the compiled graph(s) … from the cache"） | 过 ×3 |
+     | acc1 / acc2 ×3 | 0.40 | 热 | 过 ×4 |
+     冷 2/2 崩，热 7/7 过；util 0.45 在热缓存下 3/3 过 → **util 不是解释变量，冷编译才是**。（旧宿主机上通过的 20 步 dry-run 日志里是 "Compiling a graph … 9.01 s"，属于部分冷编译且通过，所以不排除"冷编译 × 这台机器"的交互；T1 / T2 是热缓存。）
+  3. 含义：现在直接重跑 A1 是热缓存，预期能过——但这和 util 无关；而链每次 `pod_stop` 之后再开机，第一个进程又是冷缓存，会再崩。
+- 04:14 UTC 启动冷缓存对照 cold1（`logs/cold1.sh`）：把 `torch_compile_cache` 改名移开（`…/torch_compile_cache.warm_0920`，不删），util 0.40、seed 1、1 步。崩 → 冷编译是触发条件，且降 util 不治本；过 → 冷编译假说不成立（或 util 0.40 确实有帮助）。
+- 04:25 UTC **cold1 结果：过**（rc=0，1 步 478 s，batch 与热缓存的 run 逐位相同）。**但 cold1 不够冷**：日志是 "Compiling a graph … 9.15 s"，而两次崩溃是 32.6 / 33.4 s——cold1 只移开了 vLLM 的 `torch_compile_cache`，inductor（`/tmp/torchinductor_root`）与 triton（`~/.triton/cache`）的缓存仍是热的（三处缓存的创建时间都是 09-19 23:46–23:48 = dbg1 启动时，即那次开机后的全冷编译）。旧宿主机上通过的那次 dry-run 同样是 9 s 的"半冷"。所以 cold1 只说明"半冷不崩"，没有检验"全冷"。
+- **用户批示（2026-09-20）**：① 修复方向 = 编译缓存持久化到 /workspace + 开机后预热，两者都做，工程修复记 log；② 验收 = 冷缓存下先复现崩溃，上修复后从冷启动连过 3 次独立启动、其中一次带小 eval；冷缓存下不崩 → 冷编译假说不成立，回到原判据直接重跑 A1，持久化缓存照做；③ util 保留 0.40，记 deviation。看板：默认只显示在跑的与最近一条、历史折叠、崩溃标红（已做：状态读 pod 上 `logs/*.rc` / `*.start`，watcher 每 10 分钟一并拉回）。
+- 04:26 UTC 启动 cold2（`logs/cold2.sh`）：**全冷**——vLLM `torch_compile_cache`、`/tmp/torchinductor_root`、`~/.triton/cache` 三处全部改名移开（`*.warm_0920` / `*.cold1_0920`，不删），util 0.40、seed 1、1 步、TORCH_SHOW_CPP_STACKTRACES=1。这才是对"冷编译触发崩溃"的检验，也是用户判据里"冷缓存下先复现崩溃"那一步。
+- 04:38 UTC **cold2 结果：全冷 + util 0.40 → 过**（rc=0；编译 32.57 s = 与两次崩溃同等的全冷；1 步 511 s；reward_acc 0.75、L_mean 8619——采样与热缓存的 run 不同，印证"新编译出的 kernel 会改变采样的数值"，也解释了 dbg1 为何与 dbg3 / dbg4 采样不同）。reserved 76.67 GiB。
+  到此的 2×2 表（这台机器，进程首个训练步）：
+  | | util 0.45 | util 0.40 |
+  |---|---|---|
+  | 全冷编译 | **崩 2/2**（A1、dbg1） | 过 1/1（cold2） |
+  | 热 / 半冷缓存 | 过 3/3（dbg2–4） | 过 6/6（acc1、acc2×3、cold1；均含热或半冷） |
+  与两个嫌疑都相容的读法：**全冷编译（多占一块显存 / 编译期的分配）× 显存余量只有约 0.8 GiB → 崩**；任一条件解除都不崩。全冷 × 0.40 只有 1 次，证据弱。
+- 04:38 UTC 启动 cold3（`logs/cold3.sh`）：全冷（三处缓存再次移开）+ **util 0.45**（配置原值）、seed 1、1 步、带 C++ 栈。= 用户判据里的"冷缓存下先复现崩溃（确认触发条件）"。崩 → 触发条件确认（全冷 × 0.45 = 3/3），并应能拿到栈；过 → 崩溃不可由"全冷 × 0.45"稳定复现，如实报告。
+- 04:46 UTC **cold3 结果：全冷 + util 0.45 → 崩**（rc=1；编译 32.33 s；第 1 个训练步 backward，`CUDA error: invalid argument`）。**触发条件确认：全冷编译 × util 0.45 = 3/3 崩**（A1、dbg1、cold3）；全冷 × 0.40 过（cold2）；热 / 半冷 × 0.45 过 3/3。
+- **拿到 C++ 栈（根因定位到分配器的显存回收路径）**：`LogsumexpBackward0` → `mul` → 申请输出张量 → `CUDACachingAllocator::malloc` → **`DeviceCachingAllocator::release_block`** → `c10_cuda_check_implementation`（CUDA invalid argument）。即：backward 里全词表 fp32 logits [T≈10.3k × V=151936]（约 6 GiB）的 logsumexp 反传要新分配一块大张量时，显存不够，缓存分配器走"释放已缓存块再重试"的路径，其中某个块的 `cudaFree` 返回 invalid argument。只有显存顶到上限时才会走到这条路径：util 0.45 下余量约 0.8 GiB，全冷编译（inductor / triton 现场编译）再多占一点就触发；热缓存或 util 0.40（余量约 2 GiB）时 malloc 直接成功，走不到 release_block。为什么 cudaFree 会对那个块报 invalid argument（与 colocate 的 vLLM 内存池 / CUDA graph 私有池 / 新驱动的关系）没有查；修复不依赖它。
+  用户最初的显存假说成立。planning-led 途中两个说过头的结论（"宿主机排除""util 不是解释变量"）均已在上文更正。
+- **修复（D20，用户批准）**：① `configs/cloud_4b.yaml` `train.vllm_gpu_memory_utilization` 0.45 → **0.40**；② `setup/env_cloud.sh`：`VLLM_CACHE_ROOT` / `TORCHINDUCTOR_CACHE_DIR` / `TRITON_CACHE_DIR` 指到 `/workspace/.cache/`（持久盘；容器盘每次 stop 清空）；③ `scripts/chain_stage1.sh`：run_matrix 之前先跑一个可丢弃的 1 步 dry-run 预热（退出码不计，tag `_warmup`，不是实验数据）。批大小 2×16、cap、reward、LoRA、eval 划分未动。04:47 UTC 已 push 到 pod。
+- 04:47 UTC 启动验收 acc3（`logs/acc3.sh`）：修复就位（util 取自配置，不再命令行覆盖），**3 次独立启动、每次启动前把全部编译缓存（持久盘新位置 + 容器盘旧位置）改名移开 = 每次都全冷（最坏情况）**，第 1 次带小 eval（n=32），各 1 步；任何一次非零退出即停。判据（用户）：3 次全过 → 重跑 A1；任何一次崩 → 停下报告。

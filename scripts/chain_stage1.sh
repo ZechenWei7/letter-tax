@@ -6,6 +6,10 @@ cd "$(dirname "$0")/.." || exit 1
 source .venv/bin/activate
 source setup/env_cloud.sh
 mkdir -p /workspace/logs; rm -f results/CHAIN_DONE
+# D20 预热：开机后先跑一个可丢弃的 1 步 dry-run（与正式 run 相同的引擎配置 → 相同的编译缓存键），退出码不计；正式 run 因而总是热缓存启动。不是实验数据。
+echo start > /workspace/logs/warmup.start; rm -f /workspace/logs/warmup.rc
+python scripts/train.py --config configs/cloud_4b.yaml --arm A --dry-run --tag _warmup --set task.key=ord_n8_h4_d5 train.dry_run_steps=1 > /workspace/logs/warmup.log 2>&1
+echo "rc=$?" > /workspace/logs/warmup.rc
 python scripts/run_matrix.py --matrix configs/matrix_stage1.yaml --strict >> /workspace/logs/chain_stage1.log 2>&1
 rc=$?
 echo "$(date -u +%FT%TZ) rc=$rc" > results/CHAIN_DONE

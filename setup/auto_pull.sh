@@ -10,10 +10,11 @@ INTERVAL="${INTERVAL:-120}"; CURVES_EVERY="${CURVES_EVERY:-600}"; mkdir -p cloud
 # D19：曲线文件（每步的 steps.jsonl 等，几 KB）每 CURVES_EVERY 秒固定拉一次，供 ops/dashboard.py 用；不含 *.zst / reward_log.jsonl / checkpoint。
 # 大归档仍只在 eval.jsonl / matrix_log / 准入 json 变化时随下面的完整 pull 走。
 pull_curves() {
-  rsync -rlz --no-perms --no-owner --no-group -e "$SSH" --prune-empty-dirs \
+  rsync -rltz --no-perms --no-owner --no-group -e "$SSH" --prune-empty-dirs \
     --include '*/' --include 'runs/*/steps.jsonl' --include 'runs/*/eval.jsonl' --include 'runs/*/designated_ckpt.json' --include 'runs/*/uninterpretable.json' \
     --include 'results/matrix_log.md' --include 'results/matrix_halt.json' --include 'results/CHAIN_DONE' --include 'results/*.json' \
     --exclude '*' "$HOST:$REMOTE_DIR/" cloud_pull/
+  mkdir -p cloud_pull/logs; rsync -rltz --no-perms --no-owner --no-group -e "$SSH" --include '*.rc' --include '*.start' --exclude '*' "$HOST:/workspace/logs/" cloud_pull/logs/   # 各 run 的退出码（看板据此标"崩溃"）
 }
 while true; do
   now=$(date +%s)

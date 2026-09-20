@@ -9,7 +9,7 @@
   python3 ops/dashboard.py                 # 生成一次
   python3 ops/dashboard.py --watch 120     # 每 120 s 重新生成（页面自带 120 s 自动刷新）
 """
-import argparse, html, json, pathlib, time
+import argparse, html, json, pathlib, re, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 KEY, LAM, MAX_STEPS, EVAL_EVERY = "ord_n8_h4_d5", 0.5, 400, 50
@@ -42,7 +42,7 @@ def collect(pull, rate):
         files = [f for f in (rd / "steps.jsonl", rd / "eval.jsonl") if f.exists()]
         mtime = max((f.stat().st_mtime for f in files), default=None)
         ckpt, unint = jf(rd / "designated_ckpt.json"), jf(rd / "uninterpretable.json")
-        status = "未开始" if not rd.exists() else ("不可解释（残留检查触发）" if unint else (f"已结束：{ckpt.get('reason')} @ step {ckpt.get('step')}" if ckpt else "进行中"))
+        status = "未开始" if not (rd.exists() and (steps or evals or (rd / "designated_ckpt.json").exists())) else ("不可解释（残留检查触发）" if unint else (f"已结束：{ckpt.get('reason')} @ step {ckpt.get('step')}" if ckpt else "进行中"))
         sec = sum(s.get("sec") or 0 for s in steps) + 60 * sum(e.get("eval_min") or 0 for e in evals)
         runs.append(dict(label=label, name=name, kind=kind, exists=rd.exists(), status=status, done=bool(ckpt or unint),
                          steps=steps, evals=evals, step=(steps[-1]["step"] if steps else 0), mtime=mtime,
@@ -60,12 +60,36 @@ def collect(pull, rate):
         left = MAX_STEPS - r["step"]
         ev_left = MAX_STEPS // EVAL_EVERY + 1 - len(r["evals"])
         remain_h += (left * step_sec + max(ev_left, 0) * ev_min * 60) / 3600
-    chain_names = {n for _, n, _ in CHAIN}; others = []                  # 链以外的 run（排查 / 验收用的 dry-run）：只列最近更新的几个
-    for rd in sorted((pull / "runs").glob("*"), key=lambda d: (d / "steps.jsonl").stat().st_mtime if (d / "steps.jsonl").exists() else 0, reverse=True):
-        st = jl(rd / "steps.jsonl")
-        if rd.name in chain_names or not st: continue
-        others.append(dict(name=rd.name, steps=st, evals=jl(rd / "eval.jsonl"), age_min=(now - (rd / "steps.jsonl").stat().st_mtime) / 60))
-    others = others[:6]
+    # 退出码：pod 上每个排查 / 验收 run 由启动脚本写 logs/<tag>.rc（"rc=N"，或多行 "<label> rc=N"）；watcher 拉到 cloud_pull/logs/
+    rcs = {}
+    for f in sorted((pull / "logs").glob("*.rc")):
+        for line in f.read_text().splitlines():
+            m = re.match(r"^(?:(\S+)\s+)?rc=(-?\d+)", line.strip())
+            if m: rcs[f.stem + ("_" + m.group(1) if m.group(1) else "")] = dict(rc=int(m.group(2)), mtime=f.stat().st_mtime)
+    def rc_for(name):
+        hit = [k for k in rcs if name.endswith("_" + k) or name == k]
+        return (max(hit, key=len), rcs[max(hit, key=len)]) if hit else (None, None)
+    chain_names = {n for _, n, _ in CHAIN}; others = []; used = set()   # 链以外的 run（排查 / 验收用的 dry-run）
+    rdirs = [d for d in (pull / "runs").glob("*") if d.is_dir()] if (pull / "runs").exists() else []
+    for rd in rdirs:
+        if rd.name in chain_names or rd.name.startswith("smoke"): continue
+        st = jl(rd / "steps.jsonl"); k, rc = rc_for(rd.name); used.add(k)
+        mt = max([(rd / "steps.jsonl").stat().st_mtime] if (rd / "steps.jsonl").exists() else [] + ([rc["mtime"]] if rc else []), default=0)
+        if not st and not rc: continue
+        others.append(dict(name=rd.name, steps=st, evals=jl(rd / "eval.jsonl"), mtime=mt, rc=(rc["rc"] if rc else None)))
+    for k, rc in rcs.items():                                            # 有退出码但没有任何已完成步的 run（第 1 步之前就崩了）
+        if k not in used and not any(o["name"].endswith("_" + k) for o in others):
+            others.append(dict(name=k, steps=[], evals=[], mtime=rc["mtime"], rc=rc["rc"]))
+    for f in (pull / "logs").glob("*.start"):                            # 启动标记：有 .start、还没有 .rc、也还没完成任何一步 → 进行中
+        if f.stem not in rcs and not any(o["name"].endswith("_" + f.stem) for o in others):
+            others.append(dict(name=f.stem, steps=[], evals=[], mtime=f.stat().st_mtime, rc=None, started=True))
+    for o in others:
+        o["age_min"] = (now - o["mtime"]) / 60
+        o["state"] = "crashed" if (o["rc"] not in (None, 0)) else ("done" if o["rc"] == 0 else ("running" if (o["age_min"] < 30 or (o.get("started") and o["age_min"] < 90)) else "unknown"))
+    others.sort(key=lambda o: o["mtime"], reverse=True)
+    for r in runs:                                                       # 链上的 run：matrix_halt.json 点名 → 崩
+        hj = jf(pull / "results" / "matrix_halt.json")
+        r["crashed"] = bool(hj and r["name"] in str(hj.get("reason", "")) and not r["steps"])
     halt, done = jf(pull / "results" / "matrix_halt.json"), (pull / "results" / "CHAIN_DONE").exists()
     warm = jf(pull / "results" / f"warm_decision_{KEY}.json")
     mlog = pull / "results" / "matrix_log.md"
@@ -96,6 +120,8 @@ main{max-width:1100px;margin:0 auto;padding:20px 16px 48px}h1{font-size:20px;mar
 svg{display:block;width:100%;height:auto;overflow:visible}svg text{font:11px system-ui,sans-serif;fill:var(--ink2)}.empty{color:var(--muted);font-size:13px;padding:40px 0;text-align:center}
 table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}th,td{text-align:right;padding:4px 8px;border-bottom:1px solid var(--rule)}th:first-child,td:first-child{text-align:left}th{color:var(--ink2);font-weight:500}
 .scroll{overflow-x:auto}pre{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px;overflow-x:auto;font-size:12px;white-space:pre-wrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;margin-right:4px}.pill.bad{background:var(--badbg);color:var(--bad)}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.run{background:var(--rule);color:var(--ink)}
+.card.run-bad{border-color:var(--bad);border-width:2px}details{margin-top:8px}summary{cursor:pointer;color:var(--ink2);font-size:13px;padding:6px 0}
 #tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);padding:4px 8px;border-radius:4px;font-size:12px;display:none;z-index:9;white-space:nowrap}
 @media (max-width:760px){.chain,.tiles{grid-template-columns:repeat(2,1fr)}.grid,.grid3{grid-template-columns:1fr}}
 """
@@ -185,16 +211,33 @@ def eval_table(r):
     return f'<h3 style="font-size:13px;margin:14px 0 4px">{esc(r["label"])} 的 eval 记录（表格视图）</h3><div class="scroll"><table><tr>{head}</tr>{body}</table></div>'
 
 
+STATE = dict(crashed=("崩溃", "bad"), done=("完成", "ok"), running=("进行中", "run"), unknown=("状态不明（无退出码、30 分钟没更新）", "warn"))
+
+
+def one_run(o):
+    lab, cls = STATE[o["state"]]
+    rows = "".join(f"<tr><td>{s.get('step')}</td><td>{s.get('sec', 0):.0f}</td><td>{s.get('gen_sec', 0):.0f}</td><td>{s.get('train_sec', 0):.0f}</td>"
+                   f"<td>{'–' if s.get('reward_acc') is None else format(s['reward_acc'], '.2f')}</td><td>{'–' if s.get('L_mean') is None else format(s['L_mean'], '.0f')}</td>"
+                   f"<td>{'–' if s.get('natural_end') is None else format(s['natural_end'], '.2f')}</td><td>{s.get('peak_reserved_gib', '–')}</td></tr>" for s in o["steps"])
+    ev = "；".join(f"eval@{e.get('step')}: acc {e.get('acc')}, L_mean {e.get('L_mean')}, n {e.get('n')}" for e in o["evals"])
+    rc = "" if o["rc"] is None else f" · 退出码 {o['rc']}"
+    body = (f'<div class="scroll"><table><tr><th>step</th><th>秒</th><th>生成秒</th><th>训练秒</th><th>reward_acc</th><th>L_mean</th><th>自然结束率</th><th>峰值 reserved GiB</th></tr>{rows}</table></div>'
+            if rows else '<p class="cs">没有任何已完成的训练步。</p>')
+    return (f'<div class="card run-{cls}" style="margin-bottom:12px"><h3><span class="pill {cls}">{lab}</span> {esc(o["name"])}</h3>'
+            f'<p class="cs">已完成 {len(o["steps"])} 步{rc} · {o["age_min"]:.0f} 分钟前更新{(" · " + esc(ev)) if ev else ""}</p>{body}</div>')
+
+
 def others_html(d):
     if not d["others"]: return '<div class="empty">cloud_pull/ 里没有链以外的 run</div>'
-    out = ""
-    for o in d["others"]:
-        rows = "".join(f"<tr><td>{s.get('step')}</td><td>{s.get('sec', 0):.0f}</td><td>{s.get('gen_sec', 0):.0f}</td><td>{s.get('train_sec', 0):.0f}</td>"
-                       f"<td>{'–' if s.get('reward_acc') is None else format(s['reward_acc'], '.2f')}</td><td>{'–' if s.get('L_mean') is None else format(s['L_mean'], '.0f')}</td>"
-                       f"<td>{'–' if s.get('natural_end') is None else format(s['natural_end'], '.2f')}</td><td>{s.get('peak_reserved_gib', '–')}</td></tr>" for s in o["steps"])
-        ev = "；".join(f"eval@{e.get('step')}: acc {e.get('acc')}, L_mean {e.get('L_mean')}, n {e.get('n')}" for e in o["evals"])
-        out += (f'<div class="card" style="margin-bottom:12px"><h3>{esc(o["name"])}</h3><p class="cs">已完成 {len(o["steps"])} 步 · 本地文件 {o["age_min"]:.0f} 分钟前更新{(" · " + esc(ev)) if ev else ""}</p>'
-                f'<div class="scroll"><table><tr><th>step</th><th>秒</th><th>生成秒</th><th>训练秒</th><th>reward_acc</th><th>L_mean</th><th>自然结束率</th><th>峰值 reserved GiB</th></tr>{rows}</table></div></div>')
+    running = [o for o in d["others"] if o["state"] == "running"]
+    rest = [o for o in d["others"] if o["state"] != "running"]
+    top = running + rest[:1]; hist = rest[1:]
+    out = "".join(one_run(o) for o in top)
+    if hist:
+        line = "".join(f'<tr><td><span class="pill {STATE[o["state"]][1]}">{STATE[o["state"]][0]}</span></td><td style="text-align:left">{esc(o["name"])}</td><td>{len(o["steps"])}</td><td>{"–" if o["rc"] is None else o["rc"]}</td><td>{o["age_min"] / 60:.1f} h 前</td></tr>' for o in hist)
+        n_bad = sum(1 for o in hist if o["state"] == "crashed")
+        out += (f'<details><summary>历史 {len(hist)} 个 run（其中崩溃 {n_bad} 个）</summary><div class="scroll"><table><tr><th>状态</th><th style="text-align:left">run</th><th>完成步数</th><th>退出码</th><th>更新</th></tr>{line}</table></div>'
+                + "".join(one_run(o) for o in hist) + '</details>')
     return out
 
 
@@ -211,7 +254,8 @@ def render(d):
     for r in runs:
         pct = 100 * r["step"] / MAX_STEPS if r["kind"] == "rl" else (100 if r["done"] else 0)
         prog = f"step {r['step']} / {MAX_STEPS} · eval {len(r['evals'])} 次" if r["kind"] == "rl" else "SFT + eval-only"
-        nodes += f'<div class="node{" cur" if r is cur else ""}"><div class="t">{esc(r["label"])}</div><div class="s">{esc(r["status"])}</div><div class="s">{prog}</div><div class="bar"><i style="width:{pct:.0f}%"></i></div></div>'
+        st_html = '<span class="pill bad">崩溃</span> matrix_halt 点名，未完成任何训练步' if r.get("crashed") else esc(r["status"])
+        nodes += f'<div class="node{" cur" if r is cur else ""}"{' style="border-color:var(--bad);border-width:2px"' if r.get("crashed") else ""}><div class="t">{esc(r["label"])}</div><div class="s">{st_html}</div><div class="s">{prog}</div><div class="bar"><i style="width:{pct:.0f}%"></i></div></div>'
     w = d["warm"]
     nodes += f'<div class="node"><div class="t">warm 判定</div><div class="s">{"未到" if not w else esc(json.dumps(w, ensure_ascii=False))}</div></div>'
     spent, worst = d["spent_h"] * rate, (d["spent_h"] + d["remain_h"]) * rate
@@ -247,7 +291,7 @@ def render(d):
 <div class="grid"><div class="card"><h3>eval acc：A1 与 B1</h3><p class="cs">x = 各自的训练步</p><div id="w_acc"></div></div>
 <div class="card"><h3>matrix_log.md 末尾</h3><p class="cs">run_matrix 自己写的记录（门 / warm 判定的正式输出在这里）</p><pre>{esc(chr(10).join(d["matrix_log"])) or "（还没有）"}</pre></div></div>
 
-<h2>5 · 排查 / 验收 run（链以外的 dry-run，最近 6 个）</h2><p class="sub">不是实验数据；一个 run 的步数停在预期之前且长时间不更新 = 崩了或还在跑，以 cloud_log 为准。</p>{others_html(d)}
+<h2>5 · 排查 / 验收 run（链以外的 dry-run）</h2><p class="sub">不是实验数据。默认只展开在跑的和最近一个，其余折叠；状态来自 pod 上启动脚本写的退出码（logs/*.rc），崩溃标红。</p>{others_html(d)}
 
 <h2>表格视图</h2>{eval_table(a1)}{eval_table(b1)}
 <div id="tip"></div><script type="application/json" id="data">{data}</script><script>{JS}</script></main></body></html>"""
