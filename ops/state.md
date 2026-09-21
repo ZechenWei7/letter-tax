@@ -62,3 +62,7 @@
 - **停机的代价**：checkpoint 每 25 步，`run_matrix` 下次自动 `--resume`，最多丢 25 步；重新开机需用户在 RunPod 控制台点（pod 上的 runpodctl 只能 stop 自己）。
 - **不需要拍板、链自己继续的**：A1 收敛 → 操纵门由 run_matrix 判 → 过则自动进 B_warm-SFT → B1 → warm 判定 → 停机。门失败 / kill / 残留触发 / 崩溃 → `--strict` 停机 + 自动 pod_stop，等用户醒来再定。
 - **可能需要拍板的**：每次 eval 后的预算重算若投影 > $240（当前最坏 ≈ $235–238，余量小）。
+
+## 待办（2026-09-21）
+- step-250 eval 落地后：用 `ops/analysis/acc_decomp.py` 更新 `ops/notes_accuracy_decomposition.md` 的分解表。
+- **B1 跑起来后：对 B 用同一脚本**（`acc_decomp.py`、`group_deg.py`、`cot_scan.py`），脚本里写死的 run 路径需改。B 在字母屏蔽下正确率可能低得多 → 组退化率与截断率都要重算，"加 G 无依据"的结论对 B 不自动成立。
