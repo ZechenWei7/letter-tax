@@ -204,8 +204,8 @@ def main():
             print(f"[run {idx+1}/{len(runs)}] {name}\n  {' '.join(cmd)}\n  then {' '.join(diag)}", flush=True)
             if not args.dry_run:
                 try:                                   # 持久盘断过一次：每个 run 启动前探测，不可写就停
-                    for d in (ROOT / "runs", ROOT / "samples", ROOT / "results"):
-                        assert_writable(d, f"before run {name}")
+                    for _probe_dir in (ROOT / "runs", ROOT / "samples", ROOT / "results"):     # D23: 不要用 d —— 会遮蔽第 141 行的 defaults 字典
+                        assert_writable(_probe_dir, f"before run {name}")
                 except WorkspaceNotWritable as e:
                     print(f"[FATAL] {e} — matrix stopped", flush=True); sys.exit(3)
                 t0 = time.time(); rc = subprocess.call(cmd, cwd=ROOT)
