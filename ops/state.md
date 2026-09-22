@@ -77,3 +77,11 @@
   (d) 去掉该 assert —— 理由：策略类已是纯描述量、类别迁移读法已撤回
   (e) 不跑 E2，报"E2 未执行"
 - **现状**：B1 已先跑（D24），E2 等裁决后用同一份 A1 `final/` 重跑即可，无任何损失。**未启用 DECISION_PENDING**（会在 90 min 后停机、打断 B1）。
+
+## 用户指示（2026-09-22 15:xx UTC）：不干预 B1；B1 收敛 + E2 落地后交"stage-1 之后的选项表"
+- **不干预 B1**，让停止规则自然结束它（包括它若在 step 100 就因 acc≈0、L 走平而判收敛的情形）。E2 由 `chain_e2_after_b1.sh` 在 B1 后自动跑。
+- **待交付（只列事实与选项，不替用户决定）**：
+  1. 剩余预算（$300 硬上限；已花按 pod 墙钟 × $1.6/h）。
+  2. 每项的费用投影 + 它能回答什么：B_warm-RL ×1 seed；B_warm-RL ×2 seeds；A 的第 2 个 seed；按预注册继续的其余臂（B2–4、A″、C_rand）在冷启动 B 失败时各自还剩什么意义。
+  3. 按预注册规则：冷启动 B 若未达匹配准确率，E1 是否不可计算、适用哪份后备论文（§4.5 "any arm has no point within 5pp of matched y → E1 not computed → §5.3 no-matched-accuracy paper"；§4.6 readings 的 "cold B fails, B_warm-RL succeeds" 与 "both fail → search-budget result"；需核对 B_warm-RL 是否可作为 E1 中的 B 臂）。
+- 触发时机：B1 的 `designated_ckpt.json` 出现 + E2 的 `evalonly_Bwarm_…/eval.jsonl` 落地。
