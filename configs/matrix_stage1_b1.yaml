@@ -1,0 +1,8 @@
+# D24（执行顺序调整）：stage-1 链的 B1 分支——A1 已完成（final/ 存在，会被跳过并复判门），跳过 B_warm-SFT。
+# 起因：B_warm-SFT 在预注册实现测试 §5.5-8（策略类分布在 warm 变换下不变）上以 1/1435 条失败并 --strict 停机，
+# 该项待用户裁决；B1 不依赖 B_warm-SFT，且 E2 可在裁决后用同一份 A1 final/ 重跑，故先跑 B1 不浪费也不预判。
+# 预注册把"跑的顺序"列为可调（记 log 即可），本文件不改任何参数、阈值、奖励或判定。
+defaults: {config: configs/cloud_4b.yaml, steps: 400}
+runs:
+  - {key: ord_n8_h4_d5, arm: A,     lam: 0.5, seed: 1, priority: 99}
+  - {key: ord_n8_h4_d5, arm: B,     lam: 0.5, seed: 1, priority: 99, warm_check: true}

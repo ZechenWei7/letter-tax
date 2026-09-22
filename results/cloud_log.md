@@ -271,3 +271,16 @@
   回归验证：本地与 pod 上 `run_matrix --matrix configs/matrix_stage1.yaml --dry-run` 均走完三项且无异常；pod 上输出 `[skip] A_0.5…: final exists` → `[run 2] Bwarm_sft…` → `[run 3/3] B_0.5…`，即 **A1 因 `final/` 存在被跳过，不重跑、不重判门**。
   旧的 `CHAIN_DONE`（rc=1）另存为 `results/CHAIN_DONE__crash0922_run_matrix_bug`。10:09 UTC 以同一条 `chain_stage1.sh` 重启（预热 → run_matrix --strict → …）。**A1 的所有结果与门的判定均在崩溃之前完成，未受影响。**
   排查与修复期间 GPU 空转约 8 分钟（≈ $0.2）。
+- 2026-09-22 10:20 UTC **B_warm-SFT 在预注册实现测试上失败 → `--strict` 停机（`sft_rc=1`）。不是代码 bug，是规则与数据打架，已停下等用户裁决。**
+  报错：`scripts/11_sft_warm.py:58  assert dist_src == dist_warm, "策略类分布在 warm 变换下必须不变"`。
+  实测分布（1435 条 A1 收敛后的正确轨迹，取最后 50 步）：源 `mixed_probe_enum 1.0`；warm 后 `mixed_probe_enum 0.9993 / case 0.0007` —— **1435 条里 1 条改变类别**（0.070%）。变换本身的编码比：`len_ratio_chars = 0.3376`（字符数降到 33.8%）。
+  **逐条读了那一条（`ord_n8_h4_d5/train/0/1038`，mixed_probe_enum → symbolic_case），根因是检测器的字母依赖 + 边界效应**：
+  - `shortcuts.py:119` `branches = case_splits + count("try")`；`shortcuts.py:125` `enum = branches > 3 × 2^S`，该题 S=1 → 阈值 6，要求**严格大于**。
+  - 该轨迹源文本 case_splits=6、`try` 出现 2 次 → branches=8 > 6 → enum → 配合 propagation=99 → `mixed_probe_enum`。
+  - warm 映射里有 `assume/suppose → »`、`case → §`，**但没有 `try` 的条目**，`try` 作为含字母 token 被直接删除 → branches 8 → 6，**6 > 6 不成立** → 不再判为 enum → 落到 `symbolic_case`（letter_frac 0）。
+  - 其余字段完全一致（case_splits 6、propagation 99、longest_chain 8、copy_rate 0、dpll_min_branches 2 均未变）。**算法没变，是一个恰好卡在阈值上的计数条目丢失。**
+  这与 paper §9 已记录的事实一致：策略分类器是**字母依赖**的，类别迁移的读法已在 v8 撤回；README §2.2 也把策略类定为"**纯描述量**，不进任何门、不参与任何判定或读法"。
+  **注意实现比注册文本更严**：§5.5 test 8 的原文是 "applied to **100** A traces, the strategy-class distribution matches A's"，实现是在全部 1435 条上做**精确相等**断言；在 100 条样本上，1/1435 的迁移几乎不会出现。
+  **未启用 DECISION_PENDING 倒计时**：该机制会在 90 min 后停机，而此刻 B1 正在跑（见下条），停机会打断 B1。GPU 没有空转，不触发"不空转超过 1.5 h"的规则。
+- 2026-09-22 10:25 UTC **先跑 B1，E2 待裁决（D24，执行顺序调整）**。新增 `configs/matrix_stage1_b1.yaml`（A1 因 `final/` 存在被跳过并复判门 → B1，`warm_check: true`）与 pod 上的 `/workspace/logs/chain_b1.sh`（与 chain_stage1.sh 同构，只换矩阵）。理由：B1 不依赖 B_warm-SFT；E2 裁决后可用同一份未改动的 A1 `final/` 重跑，不浪费也不预判；预注册把"跑的顺序"列为可调（记 log 即可），本次不改任何参数 / 阈值 / 奖励 / 判定。旧的 `matrix_halt.json` 与 `CHAIN_DONE` 另存为 `matrix_halt__Bwarm_sft_0922.json` / `CHAIN_DONE__Bwarm_halt_0922`。B1 已于 10:25 启动。
+  期间 GPU 空转合计约 12 分钟（含 10:01 那次崩溃），约 $0.3。

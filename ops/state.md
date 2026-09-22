@@ -66,3 +66,14 @@
 ## 待办（2026-09-21）
 - step-250 eval 落地后：用 `ops/analysis/acc_decomp.py` 更新 `ops/notes_accuracy_decomposition.md` 的分解表。
 - **B1 跑起来后：对 B 用同一脚本**（`acc_decomp.py`、`group_deg.py`、`cot_scan.py`），脚本里写死的 run 路径需改。B 在字母屏蔽下正确率可能低得多 → 组退化率与截断率都要重算，"加 G 无依据"的结论对 B 不自动成立。
+
+## 待用户裁决（2026-09-22 10:20 UTC 起）：B_warm-SFT / E2 的实现测试失败
+- **事实**：warm 变换后 1435 条里 **1 条**策略类改变（mixed_probe_enum → symbolic_case，0.070%）。根因是 `branches = case_splits + count("try")` 而 warm 映射没有 `try` 的符号条目，该轨迹的 branches 由 8 降到 6，恰好卡在 `> 3×2^S = 6` 的严格大于边界上。其余字段全部不变。**算法未变，是检测器的字母依赖 + 边界效应。**
+- **实现比注册文本更严**：§5.5 test 8 原文是"在 **100** 条 A 轨迹上分布相符"，实现是在全部 1435 条上精确相等断言。
+- **选项（需用户定，planning-led 不自行采纳）**：
+  (a) 按注册原文比对（100 条样本）或加容差（如 ≤1%）——只改"实现比注册更严"这一点，**warm 映射与检测器都不动**（planning-led 推荐）
+  (b) 给 warm 映射加 `try → 符号` —— 改已提交的 warm_map，会改变 E2 的数值
+  (c) 让分支计数识别 warm 符号 —— 改检测器（纯描述量）
+  (d) 去掉该 assert —— 理由：策略类已是纯描述量、类别迁移读法已撤回
+  (e) 不跑 E2，报"E2 未执行"
+- **现状**：B1 已先跑（D24），E2 等裁决后用同一份 A1 `final/` 重跑即可，无任何损失。**未启用 DECISION_PENDING**（会在 90 min 后停机、打断 B1）。
