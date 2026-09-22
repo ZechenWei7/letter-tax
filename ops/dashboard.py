@@ -169,7 +169,10 @@ const stepS = k => ['A1','B1'].map(n=>({name:n, raw:true, pts:R[n].steps.filter(
 const evalS = (k,names) => (names||['A1','B1']).map(n=>({name:n, pts:R[n].evals.filter(e=>e[k]!=null).map(e=>[e.step,e[k]])}));
 const a0 = R.A1.evals.find(e=>e.step===0);
 const AG = (D.agg && D.agg.bins) ? D.agg.bins : [];
-const agS = (k,name) => ({name, pts: AG.map(b=>[b.step, b[k]])});
+const AGc = AG.filter(b=>b.complete), AGp = AG.filter(b=>!b.complete);   // 只画满 10 步的桶；未满的桶用文字列出，不画
+const agS = (k,name) => ({name, pts: AGc.map(b=>[b.step, b[k]])});
+const partialNote = AGp.map(b=>`进行中的桶 step ${b.step_lo}–${b.step}（已 ${b.n_steps}/${D.agg.bin} 步）：exact ${(100*b.hit_exact).toFixed(1)}% · Hamming≤2 ${(100*b.hit_hamming2).toFixed(1)}% · hard ${(100*b.hard_rate).toFixed(1)}% · 零梯度组 ${(100*b.zero_grad_frac).toFixed(0)}% · 全错组 ${(100*b.all_wrong_frac).toFixed(0)}%`).join('<br>');
+const pn = document.getElementById('b_partial'); if (pn) pn.innerHTML = partialNote || '（没有进行中的桶）';
 if (AG.length) {
   chart(document.getElementById('b_hit'),  [agS('hit_exact','exact'), agS('hit_hamming2','Hamming≤2')], {kind:'pct', ymin:0, ymax:1});
   chart(document.getElementById('b_hard'), [agS('hard_rate','hard 违规')], {kind:'pct', ymin:0, ymax:1});
@@ -289,7 +292,8 @@ def render(d):
 <div class="card"><h3>自然结束率</h3><p class="cs">没撞 cap 10240 的比例</p><div id="c_nat"></div></div></div>
 <h3 style="font-size:14px;margin:16px 0 4px">B1 · 每 10 步一个点（训练 rollouts；pod 上 `ops/analysis/b_agg.py` 聚合）</h3>
 <p class="sub">命中率 = 训练采样的 exact / Hamming≤2（与 eval.jsonl 的 hit_* 同口径，但是 T=1.0 的训练样本）；零梯度组 = 组内 16 条 r 全相等（Dr. GRPO 优势恒 0）；全错组 = 组内无一答对。描述量，不进判定。</p>
-<div class="grid3"><div class="card"><h3>命中率</h3><p class="cs">exact 与 Hamming≤2</p><div id="b_hit"></div></div>
+<p class="note" id="b_partial"></p>
+<div class="grid3"><div class="card"><h3>命中率</h3><p class="cs">exact 与 Hamming≤2（x = 桶内最后一个训练步；只画满 10 步的桶）</p><div id="b_hit"></div></div>
 <div class="card"><h3>hard 违规率</h3><p class="cs">逃逸屏蔽（</think> 后有文本 / 第二个 think 标签），r = −5</p><div id="b_hard"></div></div>
 <div class="card"><h3>无梯度组</h3><p class="cs">零奖励差组占比；全错组占比作参照</p><div id="b_zero"></div></div></div>
 

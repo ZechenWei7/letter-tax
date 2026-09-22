@@ -19,14 +19,19 @@ def agg(run, binw):
     G = collections.defaultdict(list)
     for r in rd(p): G[(r["step"], r["prompt_id"])].append(r)
     if not G: return None
-    bins = collections.defaultdict(list)
-    for (s, _), g in G.items(): bins[(s - 1) // binw].append(g)        # step 1..10 → bin 0
+    # rollouts 归档的 step 是 0 起（= steps.jsonl 的 step − 1，2026-09-22 核对：归档 0..42 ↔ steps.jsonl 1..43）；这里统一换成训练步 t = s + 1
+    bins = collections.defaultdict(list); tsteps = collections.defaultdict(set)
+    for (s, _), g in G.items():
+        t = s + 1; b = (t - 1) // binw                                   # 训练步 1..10 → bin 0
+        bins[b].append(g); tsteps[b].add(t)
     out = []
     for b in sorted(bins):
         gs = bins[b]; rows = [x for g in gs for x in g]
         hd = [hamming(x.get("pred") or "", x["gold"]) for x in rows]
         sp = [max(x["r"] for x in g) - min(x["r"] for x in g) for g in gs]
-        out.append(dict(step_lo=b * binw + 1, step_hi=(b + 1) * binw, step=(b + 1) * binw, n_groups=len(gs), n=len(rows),
+        # 画图的 x 用桶内**实际最后一个训练步**，不用桶上沿；未满 binw 步的桶标 complete=False
+        out.append(dict(step_lo=b * binw + 1, step_hi=(b + 1) * binw, step=max(tsteps[b]), n_steps=len(tsteps[b]), complete=(len(tsteps[b]) == binw),
+                        n_groups=len(gs), n=len(rows),
                         hit_exact=sum(1 for x in rows if x.get("c")) / len(rows),
                         hit_hamming2=sum(1 for h in hd if h is not None and h <= 2) / len(rows),
                         hard_rate=sum(1 for x in rows if x.get("hard")) / len(rows),
