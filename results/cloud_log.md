@@ -264,3 +264,10 @@
 - 长度分位数 0→350（**仅自然结束者**）：p10 −37.6%、p25 −37.5%、p50 −35.8%、p75 −31.4%、p90 −21.1% —— 整条分布左移，各分位降幅接近。全部 500 条的 **p90 仅 −3.6%**（10240 → 9871），约一成轨迹仍顶在 cap 附近。
 - 长度信号占组内奖励差比例：251–300 = 0.500，**301–350 = 0.493**（稳定在约一半）。
 - 诊断（`06_diagnose --run runs/A_0.5_ord_n8_h4_d5_s1 --n 500`）正在跑；之后 run_matrix 写门的正式判定。
+- 2026-09-22 10:01–10:09 UTC **链在 A1 之后崩溃并被修复重启（D23，代码 bug，非协议问题）**。
+  时间线：10:01 A1 的诊断 rc=0 结束、`matrix_log` 写入 **门的正式判定 `{"ok": true, "kill": false, "token_reduction": 0.36, "acc_loss": -0.308, "L_median_final": 4539.5, "above_2x_kahn": true, "arm0": {"L": 8261.7, "acc": 0.604}, "final": {"step": 350, "L": 5289.6, "acc": 0.912}}`——与我此前的独立复算一致，门通过**；紧接着 run_matrix 转向第二个 run 时抛 `AttributeError: 'PosixPath' object has no attribute 'get'`（`run_matrix.py:151`），rc=1 退出 → `chain_stage1.sh` 写了 `CHAIN_DONE`（rc=1）并启动 `pod_stop --delay 300`。
+  **10:05 在倒计时内按 PID 杀掉 pod_stop 与 chain_stage1，pod 未停**（判断依据：这是代码 bug、没有任何需要用户拍板的内容，而停机后重开需用户到控制台，代价远大于修复本身；用户此前已指示"B1 不用等我"）。
+  **根因**：`run_matrix.py:207` 的工作区可写性探测用了 `for d in (runs, samples, results)`，遮蔽了第 141 行的 `d = m.get("defaults", {})`。第一个 run 结束后 `d` 变成 PosixPath，第二个 run 取 `d.get("config")` 即崩。**只在第二个及以后的 run 触发**，此前全是单 run 测试，故从未暴露。修复 = 循环变量改名 `_probe_dir`（D23，commit `85e9b03`）。
+  回归验证：本地与 pod 上 `run_matrix --matrix configs/matrix_stage1.yaml --dry-run` 均走完三项且无异常；pod 上输出 `[skip] A_0.5…: final exists` → `[run 2] Bwarm_sft…` → `[run 3/3] B_0.5…`，即 **A1 因 `final/` 存在被跳过，不重跑、不重判门**。
+  旧的 `CHAIN_DONE`（rc=1）另存为 `results/CHAIN_DONE__crash0922_run_matrix_bug`。10:09 UTC 以同一条 `chain_stage1.sh` 重启（预热 → run_matrix --strict → …）。**A1 的所有结果与门的判定均在崩溃之前完成，未受影响。**
+  排查与修复期间 GPU 空转约 8 分钟（≈ $0.2）。
