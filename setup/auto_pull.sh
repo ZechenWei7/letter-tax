@@ -11,7 +11,7 @@ INTERVAL="${INTERVAL:-120}"; CURVES_EVERY="${CURVES_EVERY:-600}"; mkdir -p cloud
 # 大归档仍只在 eval.jsonl / matrix_log / 准入 json 变化时随下面的完整 pull 走。
 pull_curves() {
   rsync -rltz --no-perms --no-owner --no-group -e "$SSH" --prune-empty-dirs \
-    --include '*/' --include 'runs/*/steps.jsonl' --include 'runs/*/eval.jsonl' --include 'runs/*/designated_ckpt.json' --include 'runs/*/uninterpretable.json' \
+    --include '*/' --include 'runs/*/steps.jsonl' --include 'runs/*/eval.jsonl' --include 'runs/*/designated_ckpt.json' --include 'runs/*/uninterpretable.json' --include 'runs/*/agg10.json' \
     --include 'results/matrix_log.md' --include 'results/matrix_halt.json' --include 'results/CHAIN_DONE' --include 'results/*.json' \
     --exclude '*' "$HOST:$REMOTE_DIR/" cloud_pull/
   mkdir -p cloud_pull/logs; rsync -rltz --no-perms --no-owner --no-group -e "$SSH" --include '*.rc' --include '*.start' --exclude '*' "$HOST:/workspace/logs/" cloud_pull/logs/   # 各 run 的退出码（看板据此标"崩溃"）

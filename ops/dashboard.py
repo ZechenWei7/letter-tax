@@ -90,13 +90,14 @@ def collect(pull, rate):
     for r in runs:                                                       # 链上的 run：matrix_halt.json 点名 → 崩
         hj = jf(pull / "results" / "matrix_halt.json")
         r["crashed"] = bool(hj and r["name"] in str(hj.get("reason", "")) and not r["steps"])
+    agg = jf(pull / "runs" / f"B_{LAM}_{KEY}_s1" / "agg10.json") or {}                # B1 每 10 步聚合（pod 上 ops/analysis/b_agg.py 产出）
     halt, done = jf(pull / "results" / "matrix_halt.json"), (pull / "results" / "CHAIN_DONE").exists()
     warm = jf(pull / "results" / f"warm_decision_{KEY}.json")
     mlog = pull / "results" / "matrix_log.md"
     return dict(generated=time.strftime("%Y-%m-%d %H:%M:%S %Z"), rate=rate, runs=runs, kahn2=(2 * kahn if kahn else None), kill=(1.5 * dec if dec else None),
                 frozen_direct=adm.get("direct"), M=adm.get("M"), spent_h=spent_h, remain_h=remain_h, step_sec=step_sec, ev_min=ev_min,
                 step_sec_measured=bool(all_steps), ev_min_measured=bool(all_ev), halt=halt, chain_done=done, warm=warm,
-                others=others, matrix_log=(mlog.read_text().splitlines()[-12:] if mlog.exists() else []), stage1_line=STAGE1_LINE, budget=BUDGET)
+                agg=agg, others=others, matrix_log=(mlog.read_text().splitlines()[-12:] if mlog.exists() else []), stage1_line=STAGE1_LINE, budget=BUDGET)
 
 
 CSS = """
@@ -128,7 +129,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:ta
 
 JS = r"""
 const D = JSON.parse(document.getElementById('data').textContent);
-const COL = {A1:'var(--a)', B1:'var(--b)'};
+const COL = {A1:'var(--a)', B1:'var(--b)', 'exact':'var(--b)', 'Hamming≤2':'var(--a)', 'hard 违规':'var(--bad)', '零梯度组':'var(--bad)', '全错组':'var(--ink2)'};
 const tip = document.getElementById('tip');
 function fmt(v,k){ if(v==null) return '–'; return k==='pct' ? (100*v).toFixed(1)+'%' : (Math.abs(v)>=100 ? Math.round(v).toLocaleString() : v.toFixed(2)); }
 function roll(pts,w){ return pts.map((p,i)=>{ const s=pts.slice(Math.max(0,i-w+1),i+1); return [p[0], s.reduce((a,q)=>a+q[1],0)/s.length]; }); }
@@ -167,6 +168,13 @@ const R = Object.fromEntries(D.runs.map(r=>[r.label,r]));
 const stepS = k => ['A1','B1'].map(n=>({name:n, raw:true, pts:R[n].steps.filter(s=>s[k]!=null).map(s=>[s.step,s[k]])}));
 const evalS = (k,names) => (names||['A1','B1']).map(n=>({name:n, pts:R[n].evals.filter(e=>e[k]!=null).map(e=>[e.step,e[k]])}));
 const a0 = R.A1.evals.find(e=>e.step===0);
+const AG = (D.agg && D.agg.bins) ? D.agg.bins : [];
+const agS = (k,name) => ({name, pts: AG.map(b=>[b.step, b[k]])});
+if (AG.length) {
+  chart(document.getElementById('b_hit'),  [agS('hit_exact','exact'), agS('hit_hamming2','Hamming≤2')], {kind:'pct', ymin:0, ymax:1});
+  chart(document.getElementById('b_hard'), [agS('hard_rate','hard 违规')], {kind:'pct', ymin:0, ymax:1});
+  chart(document.getElementById('b_zero'), [agS('zero_grad_frac','零梯度组'), agS('all_wrong_frac','全错组')], {kind:'pct', ymin:0, ymax:1});
+} else { for (const id of ['b_hit','b_hard','b_zero']) document.getElementById(id).innerHTML='<div class="empty">还没有 agg10.json（B1 未开始或尚未拉回）</div>'; }
 chart(document.getElementById('c_L'),   stepS('L_mean'),      {xmax:400, title:'训练采样 L_mean'});
 chart(document.getElementById('c_acc'), stepS('reward_acc'),  {xmax:400, kind:'pct', ymin:0, ymax:1});
 chart(document.getElementById('c_nat'), stepS('natural_end'), {xmax:400, kind:'pct', ymin:0, ymax:1});
@@ -267,7 +275,7 @@ def render(d):
     a1, b1 = runs[0], runs[2]
     focus = cur if cur and cur["kind"] == "rl" else (b1 if b1["exists"] else a1)
     leg = '<div class="legend"><span><i style="border-color:var(--a)"></i>A1（可用字母）</span><span><i style="border-color:var(--b)"></i>B1（禁字母）</span><span><i class="dash"></i>预注册阈值</span></div>'
-    data = json.dumps(dict(runs=[dict(label=r["label"], steps=r["steps"], evals=r["evals"]) for r in runs], kahn2=d["kahn2"], kill=d["kill"]), ensure_ascii=False).replace("</", "<\\/")
+    data = json.dumps(dict(runs=[dict(label=r["label"], steps=r["steps"], evals=r["evals"]) for r in runs], kahn2=d["kahn2"], kill=d["kill"], agg=d["agg"]), ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="120">
 <title>letter-tax stage-1 看板</title><style>{CSS}</style></head><body><main>
 <h1>letter-tax · stage-1 链看板</h1><p class="sub">生成于 {esc(d["generated"])} · 每 120 s 自动刷新 · 数据来自本地 cloud_pull/ · 只显示已记录的数字与预注册阈值线，<b>不产生任何判定</b>（判定以 run_matrix 输出为准）</p>
@@ -279,6 +287,11 @@ def render(d):
 <div class="grid3"><div class="card"><h3>L_mean（token）</h3><p class="cs">越低 = 轨迹越短</p><div id="c_L"></div></div>
 <div class="card"><h3>reward_acc</h3><p class="cs">本步 rollout 的正确率</p><div id="c_acc"></div></div>
 <div class="card"><h3>自然结束率</h3><p class="cs">没撞 cap 10240 的比例</p><div id="c_nat"></div></div></div>
+<h3 style="font-size:14px;margin:16px 0 4px">B1 · 每 10 步一个点（训练 rollouts；pod 上 `ops/analysis/b_agg.py` 聚合）</h3>
+<p class="sub">命中率 = 训练采样的 exact / Hamming≤2（与 eval.jsonl 的 hit_* 同口径，但是 T=1.0 的训练样本）；零梯度组 = 组内 16 条 r 全相等（Dr. GRPO 优势恒 0）；全错组 = 组内无一答对。描述量，不进判定。</p>
+<div class="grid3"><div class="card"><h3>命中率</h3><p class="cs">exact 与 Hamming≤2</p><div id="b_hit"></div></div>
+<div class="card"><h3>hard 违规率</h3><p class="cs">逃逸屏蔽（</think> 后有文本 / 第二个 think 标签），r = −5</p><div id="b_hard"></div></div>
+<div class="card"><h3>无梯度组</h3><p class="cs">零奖励差组占比；全错组占比作参照</p><div id="b_zero"></div></div></div>
 
 <h2>3 · 收敛了吗、门那几个数到哪了（每 50 步 eval，stopping 500 题，T = 0.6）</h2>{leg}
 <div class="grid3"><div class="card"><h3>eval L_mean</h3><p class="cs">操纵门第 1 项：相对 A1 step-0 减少 ≥ 30%</p><div id="e_L"></div></div>

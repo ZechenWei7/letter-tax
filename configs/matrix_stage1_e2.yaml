@@ -1,0 +1,5 @@
+# D25 / D24：stage-1 的 E2 分支——只跑 B_warm-SFT(A1)（A1 因 final/ 存在被跳过并复判门）。在 B1 结束后由 pod 上的 chain_e2_after_b1.sh 自动接上。
+defaults: {config: configs/cloud_4b.yaml, steps: 400}
+runs:
+  - {key: ord_n8_h4_d5, arm: A,         lam: 0.5, seed: 1, priority: 99}
+  - {key: ord_n8_h4_d5, arm: Bwarm_sft, seed: 1, priority: 99, source: A_seed}
