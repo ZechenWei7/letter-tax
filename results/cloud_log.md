@@ -284,3 +284,8 @@
   **未启用 DECISION_PENDING 倒计时**：该机制会在 90 min 后停机，而此刻 B1 正在跑（见下条），停机会打断 B1。GPU 没有空转，不触发"不空转超过 1.5 h"的规则。
 - 2026-09-22 10:25 UTC **先跑 B1，E2 待裁决（D24，执行顺序调整）**。新增 `configs/matrix_stage1_b1.yaml`（A1 因 `final/` 存在被跳过并复判门 → B1，`warm_check: true`）与 pod 上的 `/workspace/logs/chain_b1.sh`（与 chain_stage1.sh 同构，只换矩阵）。理由：B1 不依赖 B_warm-SFT；E2 裁决后可用同一份未改动的 A1 `final/` 重跑，不浪费也不预判；预注册把"跑的顺序"列为可调（记 log 即可），本次不改任何参数 / 阈值 / 奖励 / 判定。旧的 `matrix_halt.json` 与 `CHAIN_DONE` 另存为 `matrix_halt__Bwarm_sft_0922.json` / `CHAIN_DONE__Bwarm_halt_0922`。B1 已于 10:25 启动。
   期间 GPU 空转合计约 12 分钟（含 10:01 那次崩溃），约 $0.3。
+- 2026-09-22 11:56 UTC **B1 step-0 eval（冻结策略 + 字母屏蔽，stop 500，82.2 min）：acc 0.014、L_mean 9926.3、L_median 10240（= cap）、到顶率 0.95、viol 0.014、letter_frac **0.0**、mask_frac 2.3e-05、direct 0.004。**
+  屏蔽工作正常：**think 段字母占比精确为 0**，禁集 token 命中率 ≈ 0（2.3e-05）。与准入第 6 条（冻结 letter-ban 0.006）同量级。
+  **95% 的轨迹撞 cap**：在禁字母下冻结模型基本写不完，L_median 顶在 10240。eval 因此耗时 82.2 min（A1 的 step-0 是 61.6 min）。
+  **一个需要提前盯住的风险（与 §7.4 新增第一条、`ops/notes_group_degeneracy.md` 直接相关）**：acc 1.4% 时，16 条一组的期望答对数约 0.22，且 viol 也近 0 → 绝大多数组**所有 rollout 的 r 全为 0 → 组内奖励差为 0 → Dr. GRPO 优势恒为 0 → 该组无梯度**。臂 A 全程零梯度组为 0%，B 开局可能大面积退化。这正是预注册为 B 冷启动失败准备 B_warm-RL 的情形。B1 跑出若干步后用 `ops/analysis/group_deg.py` 重算（脚本里的 run 路径需改）。
+  warm 判定阈值（预注册）：B1 在 ≤200 步的最佳 acc < A1 最佳（**0.924**）− 15pp = **0.774** → cold_start_failure = True → B_warm-RL 进入待跑（受预算投影检查）。
