@@ -1,0 +1,449 @@
+{
+ "report": {
+  "n_items": 500,
+  "n_A1_correct": 458,
+  "n_zstd_heldout": 229,
+  "medians": {
+   "A1_conv": {
+    "tokens": 4493.0,
+    "cps": 12263.0,
+    "bits_dict": 15376,
+    "bits_nodict": 23868.0,
+    "n": 458
+   },
+   "N1": {
+    "tokens": 284.0,
+    "cps": 902.5,
+    "bits_dict": 808,
+    "bits_nodict": 2244.0,
+    "n": 458
+   },
+   "N2": {
+    "tokens": 134.5,
+    "cps": 235.0,
+    "bits_dict": 696,
+    "bits_nodict": 1072.0,
+    "n": 458
+   },
+   "N2s": {
+    "tokens": 134.5,
+    "cps": 234.0,
+    "bits_dict": 680,
+    "bits_nodict": 1104.0,
+    "n": 458
+   },
+   "N3": {
+    "tokens": 134.5,
+    "cps": 161.0,
+    "bits_dict": 824,
+    "bits_nodict": 816.0,
+    "n": 458
+   }
+  },
+  "ratios": [
+   {
+    "frm": "A1_conv",
+    "to": "N1",
+    "tokens": {
+     "ratio_of_medians": 0.06320943690184731,
+     "median_of_ratios": 0.05672380347622053,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.0735953681807062,
+     "median_of_ratios": 0.06570151001743224,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.05254942767950052,
+     "median_of_ratios": 0.049008168028004666,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.09401709401709402,
+     "median_of_ratios": 0.0825060380590012,
+     "n": 458
+    }
+   },
+   {
+    "frm": "N1",
+    "to": "N2",
+    "tokens": {
+     "ratio_of_medians": 0.4735915492957746,
+     "median_of_ratios": 0.4778444369860715,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.26038781163434904,
+     "median_of_ratios": 0.2636302129547471,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.8613861386138614,
+     "median_of_ratios": 0.8407079646017699,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.47771836007130125,
+     "median_of_ratios": 0.5063097133757961,
+     "n": 458
+    }
+   },
+   {
+    "frm": "N2",
+    "to": "N3",
+    "tokens": {
+     "ratio_of_medians": 1.0,
+     "median_of_ratios": 1.0,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.6851063829787234,
+     "median_of_ratios": 0.6842927631578948,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 1.1839080459770115,
+     "median_of_ratios": 1.2096774193548387,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.7611940298507462,
+     "median_of_ratios": 0.7732646048109966,
+     "n": 458
+    }
+   },
+   {
+    "frm": "N2",
+    "to": "N2s",
+    "tokens": {
+     "ratio_of_medians": 1.0,
+     "median_of_ratios": 1.0,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.9957446808510638,
+     "median_of_ratios": 1.0,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.9770114942528736,
+     "median_of_ratios": 1.0104166666666667,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 1.0298507462686568,
+     "median_of_ratios": 1.0207614942528735,
+     "n": 458
+    }
+   },
+   {
+    "frm": "A1_conv",
+    "to": "N2",
+    "tokens": {
+     "ratio_of_medians": 0.02993545515245938,
+     "median_of_ratios": 0.027436383340482505,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.01916333686699829,
+     "median_of_ratios": 0.017571717705033442,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.04526534859521332,
+     "median_of_ratios": 0.041281912004345465,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.044913691972515504,
+     "median_of_ratios": 0.04109014040999555,
+     "n": 458
+    }
+   },
+   {
+    "frm": "A1_conv",
+    "to": "N3",
+    "tokens": {
+     "ratio_of_medians": 0.02993545515245938,
+     "median_of_ratios": 0.027436383340482505,
+     "n": 458
+    },
+    "cps": {
+     "ratio_of_medians": 0.013128924406752018,
+     "median_of_ratios": 0.011968982413674396,
+     "n": 458
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.05359001040582726,
+     "median_of_ratios": 0.05013673655423884,
+     "n": 229
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.03418803418803419,
+     "median_of_ratios": 0.03180112529763268,
+     "n": 458
+    }
+   }
+  ],
+  "N_medians_all_items": {
+   "N1": {
+    "tokens": 293.5,
+    "cps": 936.5
+   },
+   "N2": {
+    "tokens": 138.0,
+    "cps": 240.5
+   },
+   "N2s": {
+    "tokens": 138.0,
+    "cps": 239.0
+   },
+   "N3": {
+    "tokens": 138.0,
+    "cps": 164.5
+   }
+  }
+ },
+ "stop": {
+  "n_items": 500,
+  "n_A1_correct": 456,
+  "n_zstd_heldout": 228,
+  "medians": {
+   "frozen_step0": {
+    "tokens": 6947.0,
+    "cps": 18618.5,
+    "bits_dict": 22852.0,
+    "bits_nodict": 32080.0,
+    "n": 284
+   },
+   "A1_step350": {
+    "tokens": 4373.0,
+    "cps": 11865.0,
+    "bits_dict": 15072.0,
+    "bits_nodict": 23532.0,
+    "n": 456
+   },
+   "N1": {
+    "tokens": 270.0,
+    "cps": 864.0,
+    "bits_dict": 856.0,
+    "bits_nodict": 2220.0,
+    "n": 456
+   },
+   "N2": {
+    "tokens": 128.0,
+    "cps": 224.0,
+    "bits_dict": 704.0,
+    "bits_nodict": 1060.0,
+    "n": 456
+   },
+   "N2s": {
+    "tokens": 128.0,
+    "cps": 224.0,
+    "bits_dict": 744.0,
+    "bits_nodict": 1084.0,
+    "n": 456
+   },
+   "N3": {
+    "tokens": 128.0,
+    "cps": 153.0,
+    "bits_dict": 836.0,
+    "bits_nodict": 808.0,
+    "n": 456
+   }
+  },
+  "ratios": [
+   {
+    "frm": "frozen_step0",
+    "to": "A1_step350",
+    "tokens": {
+     "ratio_of_medians": 0.6157334101050813,
+     "median_of_ratios": 0.637754931904404,
+     "n": 284
+    },
+    "cps": {
+     "ratio_of_medians": 0.6212100867416817,
+     "median_of_ratios": 0.6443414420141526,
+     "n": 284
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.651146507964292,
+     "median_of_ratios": 0.6675377230318882,
+     "n": 144
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.7183291770573567,
+     "median_of_ratios": 0.7390744353007432,
+     "n": 284
+    }
+   },
+   {
+    "frm": "A1_step350",
+    "to": "N1",
+    "tokens": {
+     "ratio_of_medians": 0.06174251086210839,
+     "median_of_ratios": 0.05831613064073797,
+     "n": 456
+    },
+    "cps": {
+     "ratio_of_medians": 0.07281921618204804,
+     "median_of_ratios": 0.06833515216804839,
+     "n": 456
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.056794055201698515,
+     "median_of_ratios": 0.05198116132952897,
+     "n": 228
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.09433962264150944,
+     "median_of_ratios": 0.08414369743090303,
+     "n": 456
+    }
+   },
+   {
+    "frm": "N1",
+    "to": "N2",
+    "tokens": {
+     "ratio_of_medians": 0.4740740740740741,
+     "median_of_ratios": 0.4801055408970976,
+     "n": 456
+    },
+    "cps": {
+     "ratio_of_medians": 0.25925925925925924,
+     "median_of_ratios": 0.2649561803488365,
+     "n": 456
+    },
+    "bits_dict": {
+     "ratio_of_medians": 0.822429906542056,
+     "median_of_ratios": 0.8293296892980437,
+     "n": 228
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.4774774774774775,
+     "median_of_ratios": 0.5061920098151982,
+     "n": 456
+    }
+   },
+   {
+    "frm": "N2",
+    "to": "N3",
+    "tokens": {
+     "ratio_of_medians": 1.0,
+     "median_of_ratios": 1.0,
+     "n": 456
+    },
+    "cps": {
+     "ratio_of_medians": 0.6830357142857143,
+     "median_of_ratios": 0.6859081588603497,
+     "n": 456
+    },
+    "bits_dict": {
+     "ratio_of_medians": 1.1875,
+     "median_of_ratios": 1.1595454545454547,
+     "n": 228
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 0.7622641509433963,
+     "median_of_ratios": 0.774920842886778,
+     "n": 456
+    }
+   },
+   {
+    "frm": "N2",
+    "to": "N2s",
+    "tokens": {
+     "ratio_of_medians": 1.0,
+     "median_of_ratios": 1.0,
+     "n": 456
+    },
+    "cps": {
+     "ratio_of_medians": 1.0,
+     "median_of_ratios": 1.0032154673283706,
+     "n": 456
+    },
+    "bits_dict": {
+     "ratio_of_medians": 1.0568181818181819,
+     "median_of_ratios": 1.0689000406890004,
+     "n": 228
+    },
+    "bits_nodict": {
+     "ratio_of_medians": 1.0226415094339623,
+     "median_of_ratios": 1.0208333333333333,
+     "n": 456
+    }
+   }
+  ]
+ },
+ "budget": {
+  "base_L": 4750.0,
+  "split": "report",
+  "curve": {
+   "0.1": 0.006,
+   "0.2": 0.008,
+   "0.3": 0.032,
+   "0.4": 0.116,
+   "0.5": 0.252,
+   "0.6": 0.396,
+   "0.7": 0.494,
+   "0.8": 0.584,
+   "0.9": 0.63,
+   "1.0": 0.704
+  },
+  "points": {
+   "0.1": {
+    "token_budget": 475,
+    "acc": 0.006,
+    "mean_tokens_all": 475
+   },
+   "0.2": {
+    "token_budget": 950,
+    "acc": 0.008,
+    "mean_tokens_all": 950
+   },
+   "0.3": {
+    "token_budget": 1425,
+    "acc": 0.032,
+    "mean_tokens_all": 1425
+   },
+   "0.4": {
+    "token_budget": 1900,
+    "acc": 0.116,
+    "mean_tokens_all": 1900
+   },
+   "0.5": {
+    "token_budget": 2375,
+    "acc": 0.252,
+    "mean_tokens_all": 2374.766
+   },
+   "0.6": {
+    "token_budget": 2850,
+    "acc": 0.396,
+    "mean_tokens_all": 2844.304
+   },
+   "0.7": {
+    "token_budget": 3325,
+    "acc": 0.494,
+    "mean_tokens_all": 3275.274
+   },
+   "0.8": {
+    "token_budget": 3800,
+    "acc": 0.584,
+    "mean_tokens_all": 3650.288
+   },
+   "0.9": {
+    "token_budget": 4275,
+    "acc": 0.63,
+    "mean_tokens_all": 3964.864
+   },
+   "1.0": {
+    "token_budget": 4750,
+    "acc": 0.704,
+    "mean_tokens_all": 4221.342
+   }
+  },
+  "native_acc": 0.916,
+  "native_L_median": 4696.0
+ }
+}

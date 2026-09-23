@@ -325,3 +325,9 @@
 - **stage-1 总花费（本 pod 墙钟 09-19 22:22 → 09-23 11:20）= 85.0 h ≈ $136**；对 $300 剩余 ≈ $164（全项目口径含 stage-1 前约 $48 粗估 → 剩余 ≈ $116；以 RunPod 账单为准）。选项表 `ops/options_after_stage1.md` 已按此更新。本地 `cloud_pull/` 在停机前拉全：A1 / B1 / E2 的 eval 归档、诊断（diagnostics.json + diag_*.zst）、rollouts、warm_decision。
 - **现状：等用户在选项表上决定。pod 已停；重开需用户在 RunPod 控制台操作。**
 - 2026-09-23 **E2 失败归因的纯 CPU 检查**（用户要求；未开机、不改任何东西）：本地重建 SFT 数据（与 pod 逐位一致），三列对照 A1 原文 / warm 训练数据 / E2 生成。warm 训练数据 4-gram 重复率 0.117（原文 0.110）、zlib 0.322、相邻清单间无推理标记 7.5%；E2 生成 0.944 / 0.024 / 100%。→ 循环模式不在训练数据里。数据有损：70.5% 的词删除，9.2% 的推理段只剩碎屑，序数 second–fifth 全删而 first 保留。本检查区分不了训练不够与有损推理段不可学。详见 `ops/notes_warm_lossiness.md`，样本 `ops/warm_samples/`。
+- 2026-09-23 **第二阶段（纯 CPU，未开机；不在 OSF 注册协议之内）**：
+  - 渲染器 `cot_compress/derivation.py`（N1/N2/N2s/N3，同一求解器推导，stage-1 代码未改）与连接词映射冻结于 **`f887662`**（先于长度计算）。核对 5500/5500：四版往返、独立重放、N2/N2s/N3 逐 token 对齐、N3 无字母且全在白名单；单边试探触发 0 次。文档 `ops/phase2_templates.md`。
+  - 新评估集 `data/ordering/ord_n8_h4_d5_p2eval_seed1.json`：seed 1、500 题，与 stage-1 全部 5000 题同构类与题面零重叠；S 1:471 / 2:29。
+  - 第 0 步长度阶梯（报告集、A1 答对 458 题配对）：A1 4493 token → N1 284 → N2 = N2s = N3 134；N2→N3 token 恒 1.000（构造），code point 0.685，比特 1.184（字典）/ 0.761（无字典）。与 A1 强制预算曲线同表：推导均短于最低预算点 475 token（A1 acc 0.6%）。`ops/notes_length_ladder.md`。
+  - 闸门 1 配置 `configs/phase2_gate1.yaml`（4 写法 × 2 seed、固定 250 步 SFT、新评估集、N3 在屏蔽下评估）与训练数据 `data/phase2/`（sha256 见 manifest）已准备，**未运行**；判据待用户定；runner 与 eval 集入口尚缺。
+  - paper §6.2 按用户要求加描述性注记（停止规则按 L_mean 变平时 L_median 仍在降；36% 读作下界），§7.4 引用；§9 记本条。

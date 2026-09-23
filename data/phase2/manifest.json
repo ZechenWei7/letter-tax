@@ -1,0 +1,31 @@
+{
+ "source": "ord_n8_h4_d5 seed0 train",
+ "n": 2000,
+ "renderer_commit": "f887662",
+ "files": {
+  "N1": {
+   "path": "data/phase2/gate1_sft_N1.jsonl",
+   "sha256": "0c567532a7bd248a03684c9317428df5af010f5ef23361ba01ba1dfed2f28074",
+   "bytes": 2451816,
+   "completion_chars_median": 926.0
+  },
+  "N2": {
+   "path": "data/phase2/gate1_sft_N2.jsonl",
+   "sha256": "82e32ec27106c904a4b2b8376b60830e1a243a8848a5a3582a8ba7c269fd6ac5",
+   "bytes": 1098042,
+   "completion_chars_median": 271.0
+  },
+  "N2s": {
+   "path": "data/phase2/gate1_sft_N2s.jsonl",
+   "sha256": "003aecd0d4c969cd21835597f5308c6e4d48f3c2a09308cbcdbb282e1b55730e",
+   "bytes": 1099475,
+   "completion_chars_median": 271.0
+  },
+  "N3": {
+   "path": "data/phase2/gate1_sft_N3.jsonl",
+   "sha256": "3d1476ad785766b3ce7150d1e4daa7366479b04ce20c7cb86ff7b25f4c7ea8fe",
+   "bytes": 946385,
+   "completion_chars_median": 198.5
+  }
+ }
+}
