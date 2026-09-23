@@ -114,9 +114,11 @@ class EvalCallback(TrainerCallback):
     收敛：连续两个区间 |ΔL_mean|/L_后一次 < 5% 且 |Δacc| < 4pp（stopping-eval 500 题；step-0 eval 计入历史），或 max_steps。
     残留检查（C_rand 豁免）：fn 返回 (L_mean, acc, direct_now)；acc ≥ 冻结 direct + 10pp 后生效（锁存）；
       direct_now ≥ acc − (acc − frozen_direct)/2 连续两次 → 停 run，标不可解释（runs/<run>/uninterpretable.json）。"""
-    def __init__(self, fn, every, at_start, dl_rel=0.05, dacc=0.04, frozen_direct=None, run_dir=None, arm=""):
+    def __init__(self, fn, every, at_start, dl_rel=0.05, dacc=0.04, frozen_direct=None, run_dir=None, arm="", convergence_stop=True):
         from cot_compress.stopping import ResidualCheck
         self.fn, self.every, self.at_start, self.dl_rel, self.dacc = fn, every, at_start, dl_rel, dacc
+        self.convergence_stop = convergence_stop          # D26：false = 固定步数（A1 延续），停止规则不生效；残留检查照常
+        self.eval_secs = []                               # 每次 eval 的墙钟（BudgetGuard 用）
         self.run_dir, self.resid = run_dir, ResidualCheck(frozen_direct, arm)
         self.hist = []; self.stopped_converged = False; self.stopped_residual = False
     def _record(self, res, state, control):
@@ -133,13 +135,38 @@ class EvalCallback(TrainerCallback):
         return converged(self.hist, self.dl_rel, self.dacc)
     def on_train_begin(self, args, state, control, **kw):
         if self.at_start and state.global_step == 0:
-            self._record(self.fn(0), state, control)
+            t = time.time(); res = self.fn(0); self.eval_secs.append(time.time() - t); self._record(res, state, control)
     def on_step_end(self, args, state, control, **kw):
         if self.every and state.global_step % self.every == 0:
-            self._record(self.fn(state.global_step), state, control)
-            if self._converged():
+            t = time.time(); res = self.fn(state.global_step); self.eval_secs.append(time.time() - t)
+            self._record(res, state, control)
+            if self.convergence_stop and self._converged():
                 log_md(f"STOP: converged at step {state.global_step} (two consecutive intervals ΔL<{self.dl_rel:.0%}, Δacc<{self.dacc*100:.0f}pp)")
                 self.stopped_converged = True; control.should_training_stop = True
+
+class BudgetGuard(TrainerCallback):
+    """D26：可选的费用守卫（train.budget_usd 设了才启用；A1 延续用 $35）。墙钟计费：花费 = (现在 − BUDGET_T0) × 单价，
+    BUDGET_T0 = 环境变量（链脚本在该实验开始时写入），缺省 = 本进程启动。每步结束（在 EvalCallback 之后）按
+    已花 + 剩余步 × 近 10 步中位步时 + 剩余 eval × 实测 eval 时长（无实测用 budget_eval_sec_prior）+ 收尾预留 投影；
+    投影 > 上限 → 写 budget_halt.json、存 checkpoint、停训，train.py 以退出码 5 结束（链脚本据此停下汇报）。"""
+    def __init__(self, cap, rate, t0, max_steps, eval_every, eval_cb, step_logger, run_dir, eval_sec_prior, tail_h, min_steps=5):
+        self.cap, self.rate, self.t0, self.max_steps, self.every = cap, rate, t0, max_steps, eval_every
+        self.eval_cb, self.sl, self.run_dir, self.eval_prior, self.tail_h, self.min_steps = eval_cb, step_logger, run_dir, eval_sec_prior, tail_h, min_steps
+        self.halted = False; self.last = None
+    def on_step_end(self, args, state, control, **kw):
+        from cot_compress.cost import budget_projection
+        secs = [r["sec"] for r in self.sl.records][-10:]
+        if len(secs) < self.min_steps: return
+        step = state.global_step
+        evals_left = sum(1 for k in range(step + 1, self.max_steps + 1) if self.every and k % self.every == 0)
+        ev = self.eval_cb.eval_secs[-1] if self.eval_cb.eval_secs else self.eval_prior
+        p = budget_projection((time.time() - self.t0) / 3600, self.rate, self.max_steps - step, statistics.median(secs), evals_left, ev, self.tail_h)
+        self.last = dict(step=step, **p)
+        with open(self.run_dir / "budget.jsonl", "a") as f: f.write(json.dumps(self.last) + "\n")
+        if p["projected_usd"] > self.cap:
+            json.dump(dict(self.last, cap_usd=self.cap), open(self.run_dir / "budget_halt.json", "w"), indent=1)
+            log_md(f"STOP: budget projection ${p['projected_usd']:.2f} > cap ${self.cap} at step {step} (spent ${p['spent_usd']:.2f})")
+            self.halted = True; control.should_save = True; control.should_training_stop = True
 
 def main():
     ap = argparse.ArgumentParser()
@@ -197,9 +224,10 @@ def main():
         model = get_peft_model(model, LoraConfig(r=int(tcfg["lora_r"]), lora_alpha=int(tcfg["lora_alpha"]), lora_dropout=0.0,
                                                  bias="none", target_modules=lora_targets, task_type="CAUSAL_LM"))
     tok.padding_side = "left"
-    init_from = tcfg.get("init_from") if (args.arm == "Bwarm" or args.eval_only) else None
-    if args.arm == "Bwarm" or args.eval_only:
-        assert init_from, "arm Bwarm / --eval-only needs train.init_from=runs/Bwarm_sft_<tag>/final"
+    init_any = bool(tcfg.get("init_from_any_arm", False))                # D26：任意臂从已有 adapter 起训（优化器重新初始化）；默认关
+    init_from = tcfg.get("init_from") if (args.arm == "Bwarm" or args.eval_only or init_any) else None
+    if args.arm == "Bwarm" or args.eval_only or init_any:
+        assert init_from, "arm Bwarm / --eval-only / train.init_from_any_arm needs train.init_from=<adapter dir>"
         from peft import set_peft_model_state_dict
         from safetensors.torch import load_file
         sd_path = pathlib.Path(init_from) / "adapter_model.safetensors"
@@ -354,8 +382,15 @@ def main():
             torch.cuda.empty_cache()
     if (not args.smoke and not args.dry_run and not args.eval_only) or dre:
         eval_cb = EvalCallback(do_eval, (10 ** 9 if dre else int(kcfg["eval_every"])), at_start=not args.no_eval_at_start, dacc=float(tcfg.get("stop_dacc", 0.04)),
-                               frozen_direct=frozen_direct, run_dir=run_dir, arm=args.arm)
+                               frozen_direct=frozen_direct, run_dir=run_dir, arm=args.arm, convergence_stop=bool(tcfg.get("convergence_stop", True)))
         callbacks.append(eval_cb)
+    budget_cb = None
+    if tcfg.get("budget_usd") is not None and not args.dry_run and not args.smoke and not args.eval_only:   # D26：可选费用守卫（放在 eval_cb 之后）
+        budget_cb = BudgetGuard(float(tcfg["budget_usd"]), float(tcfg.get("budget_rate", 1.6)), float(os.environ.get("BUDGET_T0", time.time())),
+                                max_steps, int(kcfg["eval_every"]), eval_cb, step_logger, run_dir,
+                                float(tcfg.get("budget_eval_sec_prior", 2100)), float(tcfg.get("budget_tail_h", 0.25)))
+        callbacks.append(budget_cb)
+        log_md(f"budget guard {run_name}: cap ${tcfg['budget_usd']} rate ${tcfg.get('budget_rate', 1.6)}/h t0={os.environ.get('BUDGET_T0', 'process start')}")
 
     trainer_kwargs = dict(model=model, processing_class=tok, reward_funcs=[reward], args=grpo, train_dataset=ds, callbacks=callbacks)
     _holder = {}
@@ -411,6 +446,8 @@ def main():
         from cot_compress.stopping import designated_ckpt           # r3：指定 checkpoint（未收敛跑满 → step = max_steps）
         dc = designated_ckpt(int(trainer.state.global_step), max_steps, eval_cb.stopped_converged, eval_cb.stopped_residual)
         json.dump(dc, open(run_dir / "designated_ckpt.json", "w")); log_md(f"designated_ckpt {run_name}: {json.dumps(dc)}")
+        if budget_cb is not None and budget_cb.halted:
+            sys.exit(5)                                               # D26：费用守卫触发 → 链脚本停下汇报
 
 if __name__ == "__main__":
     main()

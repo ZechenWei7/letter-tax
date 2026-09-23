@@ -22,3 +22,17 @@ def dry_run_report(recs: list[dict], cfg: dict, arm: str, matrix_path=None, step
                                 n_runs_in_matrix=n_runs, total_gpu_hours=(round(hours_per_run_total * n_runs, 1) if n_runs else None),
                                 usd_per_hour=usd, total_usd=(round(hours_per_run_total * n_runs * usd, 0) if n_runs else None)),
                 summary=dict(sec_per_step=round(sec, 1), gib=max(r["peak_reserved_gib"] for r in recs), gpu_h_total=(round(hours_per_run_total * n_runs, 1) if n_runs else None)))
+
+
+def budget_projection(spent_h: float, rate: float, steps_left: int, sec_per_step: float, evals_left: int, sec_per_eval: float, tail_h: float = 0.0) -> dict:
+    """D26 费用守卫的投影（纯函数，单测 tests/test_budget.py）：已花 + 剩余步 × 步时 + 剩余 eval × eval 时长 + 收尾预留，均按墙钟 × 单价。"""
+    left_h = (max(steps_left, 0) * sec_per_step + max(evals_left, 0) * sec_per_eval) / 3600 + tail_h
+    return dict(spent_usd=round(spent_h * rate, 2), remaining_usd=round(left_h * rate, 2), projected_usd=round((spent_h + left_h) * rate, 2),
+                steps_left=int(steps_left), sec_per_step=round(sec_per_step, 1), evals_left=int(evals_left), sec_per_eval=round(sec_per_eval, 1))
+
+
+def gate1_projection(spent_h: float, rate: float, runs_left_train: int, train_sec: float, runs_left_eval: int, eval_sec: float, tail_h: float = 0.0) -> dict:
+    """闸门 1 费用投影：已花 + 未训练的 run × 实测训练时长 + 未评估的 run × 每 run 评估时长（冒烟后是线性外推上界）+ 收尾（判读 / 报告）。"""
+    left_h = (runs_left_train * train_sec + runs_left_eval * eval_sec) / 3600 + tail_h
+    return dict(spent_usd=round(spent_h * rate, 2), remaining_usd=round(left_h * rate, 2), projected_usd=round((spent_h + left_h) * rate, 2),
+                runs_left_train=runs_left_train, train_sec=round(train_sec, 1), runs_left_eval=runs_left_eval, eval_sec=round(eval_sec, 1))

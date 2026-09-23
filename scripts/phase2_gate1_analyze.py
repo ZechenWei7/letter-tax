@@ -1,6 +1,6 @@
 """第二阶段闸门 1 判读（CPU）。读 6 个 run 的逐题记录，按 configs/phase2_gate1.yaml 的 analysis 段给出读法。
 判读逻辑在 cot_compress.gate1.classify（每个分支在 tests/test_gate1.py 里都有构造样例）；本脚本只负责组装数据与报告。
-配对键 = (题 id, seed)，两个 seed 合并。N3 主条件 = native_letterfree；N3u = native_none。
+每题先对两个 seed 的正确性取平均，按题 bootstrap 10000 次（cot_compress.gate1.compare）。N3 主条件 = native_letterfree；N3u = native_none。
 A1 的 91.2% 只作次要参照，不进判读。
 用法：python scripts/phase2_gate1_analyze.py [--root runs] [--out results/phase2_gate1_verdict.json]"""
 import sys, pathlib
@@ -30,8 +30,9 @@ def main():
     def rate(N, cond, field):
         v = rows[(N, cond)].values(); return sum(bool(r[field]) for r in v) / len(v)
     X = dict(N2=acc("N2", "native_none"), N2s=acc("N2s", "native_none"), N3m=acc("N3", "native_letterfree"), N3u=acc("N3", "native_none"))
-    premise = dict(N2_acc=rate("N2", "native_none", "correct"), N2_exact=rate("N2", "native_none", "exact"),
-                   N2_transplant_acc=rate("N2", "transplant_gold", "correct"))
+    premise = dict(N2_acc=rate("N2", "native_none", "correct"), N2_sound=rate("N2", "native_none", "sound"),
+                   N2_transplant_acc=rate("N2", "transplant_gold", "correct"), N3m_transplant_acc=rate("N3", "transplant_gold", "correct"),
+                   N2_exact_descriptive=rate("N2", "native_none", "exact"))
     v = G.classify(X, premise)
     table = {}
     for N, conds in (("N2", ["native_none"]), ("N2s", ["native_none"]), ("N3", ["native_letterfree", "native_none"])):
@@ -50,15 +51,17 @@ def main():
             cc = list(rows.get((N, "tamper_control"), {}).values()); mc = [r for r in cc if r["uses_flip"] or r["uses_orig"]]
             table[f"{N}:tamper_control"] |= dict(follows_flip_among_mentioning=(sum(r["follows_flip"] for r in mc) / len(mc) if mc else None),
                                                  n_mentioning=len(mc), answer_order_flip=sum(r["answer_order"] == "flip" for r in cc) / len(cc))
-    out = dict(reading=v["reading"], text=v["text"], premise=premise, premise_checks=v["premise_checks"], premise_ok=v["premise_ok"],
+    out = dict(reading=v["reading"], text=v["text"], notes=v["notes"], premise=premise, premise_checks=v["premise_checks"], premise_ok=v["premise_ok"],
                subreadings=v["subreadings"], comparisons=v["comparisons"], per_condition_pooled=table, per_run=summ,
                reference_only=dict(A1_converged_acc_stop_split=A1_REFERENCE_ACC, note="次要参照，不进判读"),
                rules=g["analysis"])
     json.dump(out, open(a.out, "w"), indent=1, ensure_ascii=False, default=list)
     print(f"读法：{v['reading']} —— {v['text']}")
     print("前提 P：", {k: round(x, 3) for k, x in premise.items()}, v["premise_checks"])
+    for n_ in v["notes"]: print("  注：", n_)
     for k, c in v["comparisons"].items():
-        print(f"  {k:12} n={c['n']} diff={c['diff']:+.3f} 90%CI=({c['ci90'][0]:+.3f},{c['ci90'][1]:+.3f}) p={c['p_mcnemar']:.3g} 等效={c['equivalent']} 显著更差={c['sig_worse']} 显著更好={c['sig_better']}")
+        print(f"  {k:12} 题数={c['n_items']} diff={c['diff']:+.3f} 90%区间=({c['ci90'][0]:+.3f},{c['ci90'][1]:+.3f}) 95%区间=({c['ci95'][0]:+.3f},{c['ci95'][1]:+.3f}) "
+              f"各 seed 点差={ {s_: round(x, 3) for s_, x in c['per_seed_diff'].items()} } 等效={c['equivalent']} 显著更差={c['sig_worse']} 显著更好={c['sig_better']}")
     if v["subreadings"]: print("  R2 子读法：", v["subreadings"])
     print("各条件（两 seed 合并）："); [print(f"  {k:28} {json.dumps({kk: (round(vv, 3) if isinstance(vv, float) else vv) for kk, vv in t.items()}, ensure_ascii=False)}") for k, t in table.items()]
     print(f"参照（不进判读）：A1 收敛准确率 {A1_REFERENCE_ACC}")

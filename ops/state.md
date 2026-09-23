@@ -91,3 +91,22 @@
 - 花费 $136（本 pod 墙钟），剩余 ≈ $164（或全项目口径 ≈ $116）。
 - **选项表：`ops/options_after_stage1.md`**。用户未决定前不跑任何东西；重开 pod 需用户在控制台点。
 - 本地 watcher / 看板仍在跑（对停机的 pod 会持续 WARN，无害；pod 重开后自动恢复）。
+
+## 2026-09-23：登记前三件事已完成（纯 CPU）；下面的执行顺序**等用户说"开始"再执行**
+用户会先写闸门 1 的 OSF 登记文本；登记挂出、用户说"开始"之前不开机。开机只能用户在 RunPod 控制台点。
+1. **开机后第一件事**：把 A1 的 `final/` 和 `checkpoint-350` 拉回本地，校验 sha256，不进 git。**完成之前不做任何别的事。**
+   - 源：pod `/workspace/cot-compress/runs/A_0.5_ord_n8_h4_d5_s1/{final,checkpoint-350}`；目的：本地 `cloud_pull/runs/A_0.5_ord_n8_h4_d5_s1/`（已被 .gitignore 覆盖）。
+   - 做法：pod 上 `sha256sum` 列表 → rsync 拉回 → 本地同样 `sha256sum -c`，全部 OK 才往下走；结果（文件数、有无 optimizer.pt / scheduler.pt）记 cloud_log。有无优化器状态决定 A1 延续走哪条路（下面第 4 步）。
+   - 拉取与校验完成后：把本提交的代码同步到 pod（pod 上 `git pull`，核对 HEAD 与本地一致），再启动链。
+   - 同时：pod 上 `setsid nohup bash scripts/pod_watchdog.sh` 常驻（空转 / DECISION_PENDING 各 90 min 兜底停机）。
+2. **闸门 1 冒烟**（`scripts/phase2_chain.py` 自动做，pod 上 `setsid nohup .venv/bin/python scripts/phase2_chain.py > /workspace/logs/phase2_chain.log 2>&1 &`）：训练 gate1_N2_s1（全量 250 步，之后直接复用）→ 评估 `--limit 20`（写到 `runs/_gate1_smoke/`）→ 检查输出格式（`</think>`、条件齐全）、解析（可解析 ≥ 50%、抽不出答案 ≤ 20%）、预算强制（think ≤ cap 1024）→ 按实测速度推算全量费用（评估按题数线性外推，是上界）。**有问题或推算 > $15 → 停下汇报。**
+3. **闸门 1 全量**：其余 5 个 run 训练 + 6 个 run 全量评估；每个 run 后按"已花 + 剩余"复算，> $15 停。然后判读（`scripts/phase2_gate1_analyze.py`）并写报告 `results/phase2_gate1_report.md`。闸门 1 费用从 pod 开机算起（含第 1 步拉取）。
+   - 判读结果（包括前提 P 不成立、R4"说不清"）是闸门 1 的结论，不是链的故障：链照常进入第 4 步（两者无依赖）。
+4. **接着自动跑 A1 延续**（探索性，不属于闸门 1 判读分区）：λ=1.0，固定 150 步，不用停止规则，每 50 步 stopping 500 题 eval（归档同 A1），费用守卫 $35 与闸门 1 分开计。
+   - checkpoint-350 有 optimizer.pt / scheduler.pt / trainer_state.json → 复制进**新目录** `runs/A_1.0_cont_from_A1s350/` 后 `--resume`（步号 350 → 500，eval 在 400 / 450 / 500）；
+   - 没有 → 从 `final/` 起训、优化器重新初始化（步号 0 → 150，报告里换算为 350 + k），记在 `continuation_origin.json` 与 cloud_log。
+   - **A1 原目录 `runs/A_0.5_ord_n8_h4_d5_s1/` 只读**（用户 2026-09-23）：eval.jsonl、final/、designated_ckpt.json、诊断文件一律不追加、不覆盖。链在延续开始前对整个原目录做 sha256 快照，训练结束后、报告写完后各比对一次；任何文件改动 / 删除 / 新增 → 停下汇报。
+   - 起点的 eval = A1 已有的 step-350 eval（eval 与 λ 无关，不重跑）。
+   - 结束后写报告 `results/a1_cont_report.md`（读法事先写死在 `ops/analysis/a1_cont_report.py`）+ CoT 抽样（`ops/cot_samples/a1_cont/`）。
+5. **全部完成后 pod_stop**（链自己 `pod_stop --delay 300 --force`）。**任何一步失败、任何预算超限，都停下汇报**：链写 `results/phase2_halt.json` 与 `/workspace/logs/DECISION_PENDING`（watchdog 90 min 后停机），不自动重试、不降配。
+- 费用预估：闸门 1 未实测（配置里估 $4–11）；A1 延续约 $31.5（150 × 430 s + 3 × 33 min + 启动），离 $35 余量小，投影超上限守卫会停。

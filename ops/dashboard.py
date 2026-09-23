@@ -14,6 +14,8 @@ import argparse, html, json, pathlib, re, time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 KEY, LAM, MAX_STEPS, EVAL_EVERY = "ord_n8_h4_d5", 0.5, 400, 50
 CHAIN = [("A1", f"A_{LAM}_{KEY}_s1", "rl"), ("B_warm-SFT(A1)", f"Bwarm_sft_{KEY}_s1", "sft"), ("B1", f"B_{LAM}_{KEY}_s1", "rl")]
+CONT = "A_1.0_cont_from_A1s350"   # 第二阶段探索性实验：A1 延续（λ=1.0，从 checkpoint-350 起固定 150 步；上限 $35；scripts/phase2_chain.py）
+CONT_CAP, CONT_START = 35.0, 350
 STAGE1_LINE, BUDGET = 240.0, 300.0   # stage-1 内部线：用户 2026-09-20 由 $200 放宽到 $240（$200 漏算了 eval）；$300 = 预注册硬上限
 
 
@@ -69,7 +71,7 @@ def collect(pull, rate):
     def rc_for(name):
         hit = [k for k in rcs if name.endswith("_" + k) or name == k]
         return (max(hit, key=len), rcs[max(hit, key=len)]) if hit else (None, None)
-    chain_names = {n for _, n, _ in CHAIN}; others = []; used = set()   # 链以外的 run（排查 / 验收用的 dry-run）
+    chain_names = {n for _, n, _ in CHAIN} | {CONT}; others = []; used = set()   # 链以外的 run（排查 / 验收用的 dry-run）
     rdirs = [d for d in (pull / "runs").glob("*") if d.is_dir()] if (pull / "runs").exists() else []
     for rd in rdirs:
         if rd.name in chain_names or rd.name.startswith("smoke"): continue
@@ -94,7 +96,13 @@ def collect(pull, rate):
     halt, done = jf(pull / "results" / "matrix_halt.json"), (pull / "results" / "CHAIN_DONE").exists()
     warm = jf(pull / "results" / f"warm_decision_{KEY}.json")
     mlog = pull / "results" / "matrix_log.md"
-    return dict(generated=time.strftime("%Y-%m-%d %H:%M:%S %Z"), rate=rate, runs=runs, kahn2=(2 * kahn if kahn else None), kill=(1.5 * dec if dec else None),
+    cd = pull / "runs" / CONT; origin = jf(cd / "continuation_origin.json")
+    off = CONT_START if (origin and origin.get("global_step_start") == 0) else 0          # 从 final/ 起训时步号从 0 记 → 换算为 A1 步
+    shift = lambda xs: [dict(x, step=x["step"] + off) for x in xs if "step" in x]
+    cont = dict(exists=cd.exists(), origin=origin, steps=shift(jl(cd / "steps.jsonl")), evals=shift(jl(cd / "eval.jsonl")),
+                budget=(jl(cd / "budget.jsonl")[-1:] or [None])[0], budget_halt=jf(cd / "budget_halt.json"),
+                report=(pull / "results" / "a1_cont_report.md").exists(), cap=CONT_CAP, start=CONT_START, end=CONT_START + 150)
+    return dict(cont=cont, p2halt=jf(pull / "results" / "phase2_halt.json"), p2done=(pull / "results" / "PHASE2_DONE").exists(), generated=time.strftime("%Y-%m-%d %H:%M:%S %Z"), rate=rate, runs=runs, kahn2=(2 * kahn if kahn else None), kill=(1.5 * dec if dec else None),
                 frozen_direct=adm.get("direct"), M=adm.get("M"), spent_h=spent_h, remain_h=remain_h, step_sec=step_sec, ev_min=ev_min,
                 step_sec_measured=bool(all_steps), ev_min_measured=bool(all_ev), halt=halt, chain_done=done, warm=warm,
                 agg=agg, others=others, matrix_log=(mlog.read_text().splitlines()[-12:] if mlog.exists() else []), stage1_line=STAGE1_LINE, budget=BUDGET)
@@ -129,7 +137,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:ta
 
 JS = r"""
 const D = JSON.parse(document.getElementById('data').textContent);
-const COL = {A1:'var(--a)', B1:'var(--b)', 'exact':'var(--b)', 'Hamming≤2':'var(--a)', 'hard 违规':'var(--bad)', '零梯度组':'var(--bad)', '全错组':'var(--ink2)'};
+const COL = {A1:'var(--a)', B1:'var(--b)', 'A1 延续':'var(--ok)', 'exact':'var(--b)', 'Hamming≤2':'var(--a)', 'hard 违规':'var(--bad)', '零梯度组':'var(--bad)', '全错组':'var(--ink2)'};
 const tip = document.getElementById('tip');
 function fmt(v,k){ if(v==null) return '–'; return k==='pct' ? (100*v).toFixed(1)+'%' : (Math.abs(v)>=100 ? Math.round(v).toLocaleString() : v.toFixed(2)); }
 function roll(pts,w){ return pts.map((p,i)=>{ const s=pts.slice(Math.max(0,i-w+1),i+1); return [p[0], s.reduce((a,q)=>a+q[1],0)/s.length]; }); }
@@ -185,6 +193,16 @@ chart(document.getElementById('e_L'),   evalS('L_mean'),  {xmax:400, ymin:0, lin
 chart(document.getElementById('e_Lm'),  evalS('L_median'),{xmax:400, ymin:0, lines:[...(D.kahn2?[{y:D.kahn2,label:'2×Kahn = '+D.kahn2+'（kill 线 '+D.kill+' 在其下方）'}]:[])]});
 chart(document.getElementById('e_acc'), evalS('acc'),     {xmax:400, kind:'pct', ymin:0, ymax:1, lines:[...(a0?[{y:a0.acc-0.05,label:'操纵门：A1 step-0 acc − 5pp = '+fmt(a0.acc-0.05,'pct')}]:[])]});
 const aBest = R.A1.evals.length ? Math.max(...R.A1.evals.map(e=>e.acc)) : null;
+const C = D.cont, A1ev = R.A1.evals;
+const a350 = A1ev.find(e=>e.step===C.start);
+const contS = k => [{name:'A1', pts:A1ev.filter(e=>e[k]!=null).map(e=>[e.step,e[k]])},
+                    {name:'A1 延续', pts:(a350?[[C.start,a350[k]]]:[]).concat(C.evals.filter(e=>e[k]!=null).map(e=>[e.step,e[k]]))}];
+if (document.getElementById('k_L')) {
+  chart(document.getElementById('k_L'),   contS('L_mean'),      {xmax:C.end, ymin:0});
+  chart(document.getElementById('k_acc'), contS('acc'),         {xmax:C.end, kind:'pct', ymin:0, ymax:1, lines:[...(a350?[{y:a350.acc-0.05,label:'读法阈值：A1 step-350 acc − 5pp = '+fmt(a350.acc-0.05,'pct')}]:[])]});
+  chart(document.getElementById('k_let'), contS('letter_frac'), {xmax:C.end, kind:'pct', ymin:0.6, ymax:0.85, lines:[{y:0.80,label:'80%'},{y:0.77,label:'77%'},{y:0.70,label:'70%'}]});
+  chart(document.getElementById('k_step'), [{name:'A1 延续', raw:true, pts:C.steps.filter(s=>s.L_mean!=null).map(s=>[s.step,s.L_mean])}], {xmax:C.end});
+}
 chart(document.getElementById('w_acc'), evalS('acc'),     {xmax:400, kind:'pct', ymin:0, ymax:1, lines:[...(aBest!=null?[{y:aBest-0.15,label:'warm 线：A1 最佳 acc − 15pp = '+fmt(aBest-0.15,'pct')+'（只看 B1 ≤200 步）'}]:[])]});
 """
 
@@ -252,11 +270,34 @@ def others_html(d):
     return out
 
 
+def cont_html(c, rate):
+    o = c["origin"] or {}; last = c["steps"][-1]["step"] if c["steps"] else c["start"]
+    b = c["budget"]; bh = c["budget_halt"]
+    mode = {"resume_checkpoint_350": "从 checkpoint-350 恢复（含优化器状态）", "init_from_final_fresh_optimizer": "从 final/ adapter 起训，优化器重新初始化"}.get(o.get("mode"), "未开始")
+    tiles = (f'<div class="tile"><div class="k">进度</div><div class="v">{last} / {c["end"]}</div><div class="d">A1 步号；延续段 {max(last - c["start"], 0)} / 150 步 · eval {len(c["evals"])} / 3 次</div></div>'
+             f'<div class="tile"><div class="k">起点</div><div class="v" style="font-size:14px">{esc(mode)}</div><div class="d">λ=1.0；不用停止规则；其余同 A1</div></div>'
+             f'<div class="tile{" bad" if (b and b["projected_usd"] > c["cap"]) or bh else ""}"><div class="k">费用（守卫的墙钟计）</div><div class="v">{"–" if not b else "$%.1f" % b["spent_usd"]}</div>'
+             f'<div class="d">{"守卫还没开始投影（前 5 步）" if not b else "投影 $%.1f / 上限 $%.0f · %.0f s/步 · eval %.0f min" % (b["projected_usd"], c["cap"], b["sec_per_step"], b["sec_per_eval"] / 60)}</div></div>'
+             f'<div class="tile"><div class="k">报告</div><div class="v" style="font-size:14px">{"已生成 results/a1_cont_report.md" if c["report"] else "未生成"}</div><div class="d">读法事先写定，报告脚本机械套用</div></div>')
+    rows = "".join(f"<tr><td>{e['step']}</td><td>{e['acc']:.3f}</td><td>{e['L_mean']:.0f}</td><td>{e['L_median']:.0f}</td><td>{e['capped_rate']:.3f}</td><td>{e.get('letter_frac', 0):.3f}</td><td>{e.get('eval_min', 0):.0f}</td></tr>" for e in c["evals"])
+    return f"""<h2>6 · 第二阶段探索性实验：A1 延续（λ = 1.0，固定 150 步）</h2>
+<p class="sub">不属于闸门 1 判读分区；全是描述量。蓝 = A1（λ=0.5，step 0–350），绿 = 延续（从 A1 step-350 的 eval 点接出）。虚线是事先写定的读法阈值（字母占比 77–80% / 70%；准确率掉 5pp），看板不做判读。</p>
+{'<div class="banner bad">⛔ 费用守卫触发：' + esc(json.dumps(bh, ensure_ascii=False)) + '</div>' if bh else ''}
+<div class="tiles">{tiles}</div>
+<div class="grid" style="margin-top:12px"><div class="card"><h3>eval L_mean</h3><p class="cs">stopping 500 题</p><div id="k_L"></div></div>
+<div class="card"><h3>eval acc</h3><p class="cs">线 = A1 step-350 acc − 5pp</p><div id="k_acc"></div></div>
+<div class="card"><h3>eval 字母占比</h3><p class="cs">77–80% 保持 / 降到 70% 以下</p><div id="k_let"></div></div>
+<div class="card"><h3>训练采样 L_mean（每步）</h3><p class="cs">T = 1.0，点 + 10 步滑动平均</p><div id="k_step"></div></div></div>
+{'<div class="scroll" style="margin-top:8px"><table><tr><th>step</th><th>acc</th><th>L_mean</th><th>L_median</th><th>到顶率</th><th>字母占比</th><th>eval 分钟</th></tr>' + rows + '</table></div>' if rows else ''}"""
+
+
 def render(d):
     runs = d["runs"]; rate = d["rate"]
     cur = next((r for r in runs if r["exists"] and not r["done"]), None)
     banners = ""
     if d["halt"]: banners += f'<div class="banner bad">⛔ 链已停（--strict）：{esc(d["halt"].get("reason"))} · {esc(d["halt"].get("time"))} — 需要用户决定</div>'
+    if d.get("p2halt"): banners += f'<div class="banner bad">⛔ 第二阶段链已停：[{esc(d["p2halt"].get("stage"))}] {esc(d["p2halt"].get("reason"))} · {esc(d["p2halt"].get("time"))} — 需要用户决定</div>'
+    if d.get("p2done"): banners += '<div class="banner ok">✓ PHASE2_DONE：第二阶段链（闸门 1 + A1 延续）已结束</div>'
     if d["chain_done"]: banners += '<div class="banner ok">✓ CHAIN_DONE：stage-1 链已结束</div>'
     if not any(r["exists"] for r in runs): banners += '<div class="banner warn">⚠ cloud_pull/ 里还没有 stage-1 任何 run 的文件：链没开始，或 watcher 还没把 steps.jsonl 拉回来</div>'
     elif cur and cur["age_min"] is not None and cur["age_min"] > 25 and not d["halt"] and not d["chain_done"]:
@@ -278,7 +319,7 @@ def render(d):
     a1, b1 = runs[0], runs[2]
     focus = cur if cur and cur["kind"] == "rl" else (b1 if b1["exists"] else a1)
     leg = '<div class="legend"><span><i style="border-color:var(--a)"></i>A1（可用字母）</span><span><i style="border-color:var(--b)"></i>B1（禁字母）</span><span><i class="dash"></i>预注册阈值</span></div>'
-    data = json.dumps(dict(runs=[dict(label=r["label"], steps=r["steps"], evals=r["evals"]) for r in runs], kahn2=d["kahn2"], kill=d["kill"], agg=d["agg"]), ensure_ascii=False).replace("</", "<\\/")
+    data = json.dumps(dict(cont=dict(start=d["cont"]["start"], end=d["cont"]["end"], evals=d["cont"]["evals"], steps=d["cont"]["steps"]), runs=[dict(label=r["label"], steps=r["steps"], evals=r["evals"]) for r in runs], kahn2=d["kahn2"], kill=d["kill"], agg=d["agg"]), ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="120">
 <title>letter-tax stage-1 看板</title><style>{CSS}</style></head><body><main>
 <h1>letter-tax · stage-1 链看板</h1><p class="sub">生成于 {esc(d["generated"])} · 每 120 s 自动刷新 · 数据来自本地 cloud_pull/ · 只显示已记录的数字与预注册阈值线，<b>不产生任何判定</b>（判定以 run_matrix 输出为准）</p>
@@ -310,6 +351,7 @@ def render(d):
 
 <h2>5 · 排查 / 验收 run（链以外的 dry-run）</h2><p class="sub">不是实验数据。默认只展开在跑的和最近一个，其余折叠；状态来自 pod 上启动脚本写的退出码（logs/*.rc），崩溃标红。</p>{others_html(d)}
 
+{cont_html(d["cont"], rate)}
 <h2>表格视图</h2>{eval_table(a1)}{eval_table(b1)}
 <div id="tip"></div><script type="application/json" id="data">{data}</script><script>{JS}</script></main></body></html>"""
 

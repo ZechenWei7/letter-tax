@@ -31,8 +31,8 @@ eval:                                       # scripts/phase2_gate1_eval.py
     N3:  [letterfree, none]                 # N3 禁字母（主）与不禁字母各评估一次
   per_run_report:
     - acc                                   # exact match（evaluate._row，同 stage-1：hard 违规记错）
-    - exact                                 # 解析回正确求解步骤：parse 成功且与规范推导逐步相同
-    - parsed / sound                        # 副：可解析 / 可解析且 verify 通过
+    - sound                                 # 可证率（前提 P 用）：每一步能从题目约束推出，且最终顺序正确
+    - exact / parsed                        # 描述量：与规范推导逐步相同 / 可解析
     - loop                                  # 同一非空行重复 ≥ 5 次（金标推导最多重复 4 次）
     - capped                                # 撞 cap（预算强制收尾）
     - letter_frac
@@ -51,24 +51,32 @@ eval:                                       # scripts/phase2_gate1_eval.py
       mask: primary
 
 analysis:                                   # scripts/phase2_gate1_analyze.py → cot_compress.gate1.classify；每个分支在 tests/test_gate1.py 里都有构造样例
-  pairing: 按题配对（键 = 题 id × seed），两个 seed 合并（每个比较 1000 对）
-  equivalence: TOST ±5pp（配对差的 90% 置信区间落在 (−5pp, +5pp) 内，正态近似）
-  difference: McNemar 精确双侧 p < 0.05 且配对差 ≤ −5pp（"显著更差"）/ ≥ +5pp（"显著更好"）
+  # 2026-09-23 用户改（登记前）：前提用可证率；所有比较改为按题 bootstrap；R2 / R3 另要求两个 seed 同号；R1 另要求 N3 移植 < 10%
+  comparisons: [N3m vs N2, N2s vs N2, N2s vs N3m, N3u vs N2, N3m vs N3u（R2b 用点估计）]
+  statistic: 每题先对两个 seed 的正确性取平均，d_i = 两臂之差；按题 bootstrap 10000 次（numpy default_rng(0)）
+  equivalence: d 均值的 90% bootstrap 区间落在 (−5pp, +5pp) 内
+  difference: 95% bootstrap 区间不含 0 且 |点估计| ≥ 5pp（负 = 显著更差，正 = 显著更好）
   N3_primary: N3 禁字母（native_letterfree）；N3u = 不禁字母（native_none）
-  premise_P: [N2 准确率 ≥ 50%, N2 解析正确率 ≥ 80%, N2 移植（transplant_gold）准确率 < 10%]   # 两个 seed 合并
+  premise_P: [N2 准确率 ≥ 50%, N2 可证率 ≥ 80%, N2 移植（transplant_gold）准确率 < 10%]   # 两个 seed 合并
+  sound_definition: 生成推导可解析、每一步都能从题目约束推出（derivation.verify）、最后一步是 order 且给出的顺序正确
+  exact_definition: 与规范推导逐步相同——描述量，另报，不进判读
   if_P_fails: "干净推导在此训练量下不可学/不可执行；停"
   readings:
-    R1: N3 与 N2 等效 → 给定相同内容，无字母记法执行得和简洁英文一样好
-    R2: N3 显著更差 → 看子读法（恰好命中一个才采用；命中 0 个或 ≥2 个 → 说不清，停）
+    R1: N3 与 N2 等效，且 N3（禁字母）移植准确率 < 10% → 给定相同内容，无字母记法执行得和简洁英文一样好
+    R2: N3 显著更差，且两个 seed 各自的点差都 < 0 → 看子读法（恰好命中一个才采用；命中 0 个或 ≥2 个 → 说不清，停）
     R2a: N2s − N2 ≤ −5pp（点估计）且 N2s 与 N3 等效 → 起作用的是连接词的含义，不是字母
     R2b: N2s 与 N2 等效 且 |N3 − N3u| < 5pp（点估计）→ 起作用的是字母本身
-    R2c: N3u 与 N2 等效（N3 禁字母时显著更差已由 R2 保证）→ 是 mask 本身在干扰
-    R3: N3 显著更好 → 如实报告
-    R4: 以上都不是 → 说不清，停
+    R2c: N3u 与 N2 等效 → 是 mask 本身在干扰
+    R3: N3 显著更好，且两个 seed 各自的点差都 > 0 → 如实报告
+    R4: 以上都不是（含"等效但 N3 移植 ≥ 10%"与"显著但两个 seed 不同号"）→ 说不清，停
   reference_only: A1 收敛准确率 91.2%（stage-1 停止集）——只作次要参照，不进判读
 
+budget:
+  cap_usd: 15                               # 写死（用户 2026-09-23）；与 A1 延续的 $35 分开计
+  rate_usd_per_hour: 1.6
+  rule: 冒烟测试后按实测速度推算全量；推算 > $15 → 停下汇报。全量运行中每个 run 结束后按"已花 + 剩余 run × 实测每 run 用时"复算，超 $15 → 停下汇报
 cost_estimate_usd:                          # $1.6/h；未实测
-  per_run_hours: [0.35, 1.1]                # SFT 250 步（序列 ≤ ~600 token）约 10–20 min + 合并 / 载入；评估：cap 1024，500 题 × (原生 1–2 次 + 直接 + 移植 2 次 + 篡改 2×292) 约 10–30 min
+  per_run_hours: [0.35, 1.1]                # SFT 250 步（序列 ≤ ~600 token）约 10–20 min + 合并 / 载入；评估：cap 1024，500 题 × (原生 1–2 次 + 直接 + 移植 2 次 + 篡改 2×262) 约 10–30 min
   total_6_runs: [4, 11]
 
 not_yet_verified_on_gpu:                    # 在 CPU 上用 --stub 跑通了整条打分与判读流水线；下列部分只能在 pod 上验证

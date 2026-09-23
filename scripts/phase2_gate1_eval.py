@@ -101,6 +101,7 @@ def main():
                batch_size=int(cfg["generation"].get("eval_batch_size", 64)))
     masks = list(g["eval"]["mask"][N]) if isinstance(g["eval"]["mask"][N], list) else [g["eval"]["mask"][N]]
     primary = masks[0]
+    T0 = time.time(); timing = {}                                            # 分段墙钟（链脚本按它推算全量费用）
     if a.stub:
         from transformers import AutoTokenizer
         tok = AutoTokenizer.from_pretrained(cfg["model"]["name"], local_files_only=True); install_stub(tok, items, N, a.stub, cap, reserve)
@@ -110,6 +111,7 @@ def main():
     from cot_compress.span import HOOK
     from cot_compress.lengths import letter_fraction
     from cot_compress.archive import append_jsonl_zst
+    timing["load_sec"] = round(time.time() - T0, 1); t_ = time.time()
     gold = {it["id"]: D.derive(it) for it in items}
     gold_txt = {it["id"]: D.render(gold[it["id"]], it, N) for it in items}
     rows_out, summ = [], dict(run=run_name, notation=N, seed=a.seed, n_items=len(items), cap=cap, masks=masks, primary_mask=primary,
@@ -124,11 +126,13 @@ def main():
             recs.append(dict(cond=f"native_{mask}", id=it["id"], seed=a.seed, correct=bool(r["correct"]), pred=r["pred"], capped=bool(r["capped"]),
                              loop=G.loop_flag(th), letter_frac=letter_fraction(th), think_tokens=r["think_tokens"], completion=r["completion"], **sd))
         summ[f"native_{mask}"] = summarize_native(recs); rows_out += recs
+        timing[f"native_{mask}_sec"] = round(time.time() - t_, 1); t_ = time.time()
         if mask == primary: native_primary = recs
     HOOK.configure(tok, reserve=reserve, mask_mode="none")                   # 直接作答
     rows = E.run_eval(None, tok, key, items, "direct", gen, seed=EVAL_SAMPLING_SEED)
     rows_out += [dict(cond="direct", id=it["id"], seed=a.seed, correct=bool(r["correct"]), pred=r["pred"], completion=r["completion"]) for it, r in zip(items, rows)]
     summ["direct"] = dict(n=len(rows), acc=sum(r["correct"] for r in rows) / len(rows))
+    timing["direct_sec"] = round(time.time() - t_, 1); t_ = time.time()
     pi = G.transplant_pairing(len(items), seed=0)                            # 移植
     for cond, src in (("transplant_gold", lambda j: gold_txt[items[j]["id"]]), ("transplant_own", lambda j: G.think_of(native_primary[j]["completion"]))):
         ids = [tok(src(pi[i]), add_special_tokens=False)["input_ids"] for i in range(len(items))]
@@ -137,6 +141,7 @@ def main():
                           donor_answer_copied=(r["pred"] == items[pi[i]]["answer"])) for i, (it, r) in enumerate(zip(items, rows))]
         summ[cond] = dict(n=len(rows), acc=sum(r["correct"] for r in rows) / len(rows),
                           donor_answer_copied=sum(r["pred"] == items[pi[i]]["answer"] for i, r in enumerate(rows)) / len(rows))
+    timing["transplant_sec"] = round(time.time() - t_, 1); t_ = time.time()
     plans = {it["id"]: G.tamper_plan(gold[it["id"]], it) for it in items}    # 篡改
     T = [(it, plans[it["id"]]) for it in items if plans[it["id"]]]
     HOOK.configure(tok, reserve=reserve, mask_mode=primary)
@@ -173,6 +178,9 @@ def main():
                               control_follows_flip_among_mentioning=(sum(r["follows_flip"] for r in ment_c) / len(ment_c) if ment_c else None),
                               answer_order_flip=sum(r["answer_order"] == "flip" for r in tam["tamper"]) / len(T),
                               control_answer_order_flip=sum(r["answer_order"] == "flip" for r in tam["control"]) / len(T))
+    timing["tamper_sec"] = round(time.time() - t_, 1); timing["total_sec"] = round(time.time() - T0, 1)
+    summ["timing"] = timing
+    summ["max_think_tokens"] = max((r.get("think_tokens") or 0) for r in rows_out if r["cond"].startswith("native_"))
     summ["finished"] = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     json.dump(summ, open(out_dir / "gate1_eval.json", "w"), indent=1)
     p = out_dir / "gate1_rows.jsonl.zst"

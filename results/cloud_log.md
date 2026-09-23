@@ -332,3 +332,10 @@
   - 闸门 1 配置 `configs/phase2_gate1.yaml`（4 写法 × 2 seed、固定 250 步 SFT、新评估集、N3 在屏蔽下评估）与训练数据 `data/phase2/`（sha256 见 manifest）已准备，**未运行**；判据待用户定；runner 与 eval 集入口尚缺。
   - paper §6.2 按用户要求加描述性注记（停止规则按 L_mean 变平时 L_median 仍在降；36% 读作下界），§7.4 引用；§9 记本条。
 - 2026-09-23 **闸门 1 准备完毕、未运行（纯 CPU）**：去掉 N1 → N2/N2s/N3 × 2 seed = 6 run；SFT 固定 250 步、超参同 B_warm-SFT；评估 cap 1024（金标推导最长 335 token）；N3 禁 / 不禁字母各一次；内容检验：移植（金标供体为主、自身轨迹为副）与篡改（覆盖 262/500，含对照基线）；判读分区写进 `cot_compress/gate1.classify`，18 项单测覆盖每个分支。训练 runner dry-run 6/6 通过（sha256、超参）；评估入口与判读用 oracle / mixed 两种桩在 CPU 上端到端跑通；过程中修两处（篡改条件名、篡改目标须在最终解中成立）。GPU 侧（训练、vLLM 载入、cap 1024 强制）未验证。清单与待确认定义：`ops/phase2_gate1_ready.md`。用户将写登记文本挂 OSF 后再开机。
+- 2026-09-23 **登记前三件事（纯 CPU，未开机）**：
+  - 闸门 1 改四处（用户定，任何闸门 1 数据之前）：① 前提 P 用可证率（每一步能从题目约束推出且最终顺序正确），与规范推导逐步相同改为描述量另报；② 所有比较改为每题先对两 seed 取平均、按题 bootstrap 10000 次（等效 = 90% 区间在 ±5pp 内；差异 = 95% 区间不含 0 且 |点估计| ≥ 5pp），去掉配对 TOST 与 McNemar；③ R2 / R3 另要求两个 seed 各自点差同号；④ R1 另要求 N3（禁字母）移植准确率 < 10%。`cot_compress/gate1.py`、`scripts/phase2_gate1_analyze.py`、`configs/phase2_gate1.yaml`（写死 budget.cap_usd 15）已改；单测 `tests/test_gate1.py` 22 项覆盖改后每个分支，全过。
+  - 探索性实验 A1 延续（不属于闸门 1 判读分区）准备完毕：λ=1.0，从 A1 checkpoint-350 固定 150 步，不用停止规则，其余同 A1，每 50 步 stopping 500 题 eval，上限 $35 与闸门 1 分开计。checkpoint-350 有优化器状态则恢复（--resume），没有则从 final/ 起训、优化器重新初始化并记下（`continuation_origin.json`）。`train.py` 三个默认关的开关（D26）。报告脚本 `ops/analysis/a1_cont_report.py` 的读法写死在数据之前；按之前方法做 CoT 抽样。看板加了第 6 节。
+  - 链 `scripts/phase2_chain.py`：冒烟（训练 gate1_N2_s1 全量 + 评估 --limit 20，检查格式 / 解析 / 预算强制，按实测推算全量）→ 全量 6 run（每个 run 后复算，> $15 停）→ 判读与报告 → A1 延续（train.py 费用守卫 $35）→ 报告 → pod_stop。任何失败或超预算 → phase2_halt.json + DECISION_PENDING，退出码 4。本地演练（stub 生成器、训练 dry-run）端到端通过；冒烟检查对注入的缺条件 / 超 cap 能报出。
+  - 费用预估：A1 延续约 $31.5（150 步 × 430 s + 3 次 eval × 33 min + 启动），离 $35 余量约 $3.5；投影超上限时守卫会停下汇报。
+  - 用户确认（提交前）：A1 延续在新目录 `runs/A_1.0_cont_from_A1s350/` 里跑（先复制 checkpoint-350 再 resume；本来就不是原地续跑，目录改名），A1 原目录只读。链在延续前对 A1 原目录做 sha256 快照，训练后、报告后各比对一次，不一致即停。
+  - 执行顺序写入 `ops/state.md`，等用户说"开始"。

@@ -3,8 +3,10 @@
 
 定义（在任何 gate-1 数据之前写定）：
   think 段        模型输出中第一个 "</think>" 之前的文本，去掉末尾换行（SFT 目标是 "推导\n</think>…"）。
-  解析正确        derivation.parse(think) 成功，且与该题的规范推导 derivation.derive(item) 逐步完全相同。
-  可解析 / 可证   parse 成功 / parse 成功且 derivation.verify 通过（副指标）。
+  可证（前提 P 用）  derivation.parse(think) 成功，derivation.verify 通过（每一步的每条链的每一环都是当时可用的约束，即都能从题目约束推出），
+                  且最后一步是 order、给出的全序等于正确答案。（2026-09-23 用户改：前提 P 由"与规范推导逐步相同"改为可证率。）
+  与规范推导相同  parse 成功且与 derivation.derive(item) 逐步完全相同——描述量，另报，不进判读。
+  可解析          parse 成功——描述量。
   循环            think 段中同一非空行出现 ≥ LOOP_MIN_REPEATS 次（新评估集 500 题的金标推导里，同一行最多重复 4 次）。
   撞 cap          think 段到达 cap（由预算强制收尾），即 evaluate._row 的 capped。
   移植            题 i 的 think 段整段替换为题 π(i) 的金标推导（同一写法），π 为 seed 0 的均匀随机错位；只生成答案。
@@ -24,9 +26,9 @@ import collections, math, random
 from cot_compress import derivation as D
 
 LOOP_MIN_REPEATS = 5
-TOST_MARGIN = 0.05
-ALPHA = 0.05
-Z90 = 1.6448536269514722        # 双单侧 α=0.05 的 TOST ⇔ 90% 置信区间落在 ±margin 内
+MARGIN = 0.05                   # 等效界 ±5pp；差异的点估计门槛 5pp
+N_BOOT = 10000
+BOOT_SEED = 0
 
 
 # ---------------------------------------------------------------- 打分
@@ -44,9 +46,10 @@ def score_derivation(think: str, item: dict, version: str, gold_steps: list) -> 
         steps = D.parse(think, item, version)
     except Exception:
         return dict(parsed=False, exact=False, sound=False)
-    try: sound = D.verify(steps, item)[0]
-    except Exception: sound = False
-    return dict(parsed=True, exact=(steps == gold_steps), sound=bool(sound))
+    try: ok = D.verify(steps, item)[0]
+    except Exception: ok = False
+    sound = bool(ok and steps and steps[-1]["t"] == "order")          # verify 已核对 order 行 == σ 且为最后一步
+    return dict(parsed=True, exact=(steps == gold_steps), sound=sound)
 
 
 # ---------------------------------------------------------------- 移植
@@ -114,40 +117,42 @@ def continuation_follow(cont_think: str, version: str, edge: tuple, pred: str | 
                 follows_flip=(uses_flip and not uses_orig), answer_order=order)
 
 
-# ---------------------------------------------------------------- 判读（配对：键 = (题 id, seed)）
-def mcnemar_p(b: int, c: int) -> float:
-    """精确双侧 McNemar（二项检验，p=0.5）。"""
-    n = b + c
-    if n == 0: return 1.0
-    k = min(b, c)
-    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n
-    return min(1.0, 2 * tail)
-
-
-def compare(xa: dict, xb: dict) -> dict:
-    """xa, xb: {(item, seed): 0/1}。diff = acc_b − acc_a（按配对键）。"""
-    keys = sorted(set(xa) & set(xb)); n = len(keys)
-    assert n >= 2, "need paired data"
-    d = [int(xb[k]) - int(xa[k]) for k in keys]
-    b10 = sum(1 for k in keys if xa[k] and not xb[k]); b01 = sum(1 for k in keys if not xa[k] and xb[k])
-    mean = sum(d) / n
-    var = sum((x - mean) ** 2 for x in d) / (n - 1)
-    se = math.sqrt(var / n)
-    ci90 = (mean - Z90 * se, mean + Z90 * se)
-    p = mcnemar_p(b10, b01)
-    return dict(n=n, acc_a=sum(int(xa[k]) for k in keys) / n, acc_b=sum(int(xb[k]) for k in keys) / n, diff=mean,
-                a_only=b10, b_only=b01, p_mcnemar=p, ci90=ci90,
-                equivalent=(ci90[0] > -TOST_MARGIN and ci90[1] < TOST_MARGIN),
-                sig_worse=(p < ALPHA and mean <= -TOST_MARGIN), sig_better=(p < ALPHA and mean >= TOST_MARGIN))
+# ---------------------------------------------------------------- 判读（2026-09-23 用户改：按题 bootstrap；去掉配对 TOST 与 McNemar）
+def compare(xa: dict, xb: dict, n_boot: int = N_BOOT, seed: int = BOOT_SEED) -> dict:
+    """xa, xb: {(题 id, seed): 0/1}。每题先对各 seed 的正确性取平均（x̄_a、x̄_b），d_i = x̄_b − x̄_a；按题 bootstrap n_boot 次。
+    等效 = d 均值的 90% bootstrap 区间落在 (−5pp, +5pp) 内；差异 = 95% 区间不含 0 且 |点估计| ≥ 5pp。
+    另给每个 seed 各自的点差（该 seed 下 acc_b − acc_a），供"两个 seed 同号"条件用。"""
+    import numpy as np
+    keys = set(xa) & set(xb)
+    items = sorted({k[0] for k in keys}); seeds = sorted({k[1] for k in keys})
+    assert len(items) >= 2, "need paired data"
+    def mean_over_seeds(x, i): v = [int(x[(i, s)]) for s in seeds if (i, s) in keys]; return sum(v) / len(v)
+    d = np.array([mean_over_seeds(xb, i) - mean_over_seeds(xa, i) for i in items], dtype=float)
+    rng = np.random.default_rng(seed)
+    boot = d[rng.integers(0, len(d), size=(n_boot, len(d)))].mean(axis=1)
+    ci90 = tuple(float(x) for x in np.percentile(boot, [5, 95])); ci95 = tuple(float(x) for x in np.percentile(boot, [2.5, 97.5]))
+    mean = float(d.mean())
+    per_seed = {s: (sum(int(xb[(i, s)]) - int(xa[(i, s)]) for i in items if (i, s) in keys) / sum(1 for i in items if (i, s) in keys)) for s in seeds}
+    different = (ci95[0] > 0 or ci95[1] < 0) and abs(mean) >= MARGIN
+    return dict(n_items=len(items), seeds=seeds, acc_a=sum(mean_over_seeds(xa, i) for i in items) / len(items),
+                acc_b=sum(mean_over_seeds(xb, i) for i in items) / len(items), diff=mean, ci90=ci90, ci95=ci95,
+                per_seed_diff=per_seed, seeds_same_sign=(all(v > 0 for v in per_seed.values()) or all(v < 0 for v in per_seed.values())),
+                equivalent=(ci90[0] > -MARGIN and ci90[1] < MARGIN),
+                sig_worse=(different and mean < 0), sig_better=(different and mean > 0))
 
 
 def classify(acc: dict, premise: dict) -> dict:
-    """acc: {"N2": {...}, "N2s": {...}, "N3m": {...}, "N3u": {...}}，值为 {(item, seed): 0/1}（原生 think 评估；N3m = 禁字母，N3u = 不禁字母）。
-    premise: {"N2_acc": float, "N2_exact": float, "N2_transplant_acc": float}（两个 seed 合并）。
-    返回 dict(reading, premise_ok, premise_checks, comparisons, subreadings)。"""
-    pc = dict(N2_acc_ge_50=premise["N2_acc"] >= 0.50, N2_exact_ge_80=premise["N2_exact"] >= 0.80,
+    """acc: {"N2": {...}, "N2s": {...}, "N3m": {...}, "N3u": {...}}，值为 {(题 id, seed): 0/1}（原生 think 评估；N3m = 禁字母，N3u = 不禁字母）。
+    premise: {"N2_acc", "N2_sound", "N2_transplant_acc", "N3m_transplant_acc"}（两个 seed 合并）。
+    分区（用户 2026-09-23 定稿）：
+      前提 P：N2 准确率 ≥ 50%、N2 可证率 ≥ 80%、N2 移植准确率 < 10%。不成立 → P_fail，停。
+      R1：N3 与 N2 等效，且 N3（禁字母）移植准确率 < 10%。
+      R2：N3 显著更差，且两个 seed 各自的点差都 < 0 → 子读法 R2a / R2b / R2c 恰好命中一个才采用，否则 R2_unclear。
+      R3：N3 显著更好，且两个 seed 各自的点差都 > 0。
+      R4：以上都不是（含：等效但 N3 移植 ≥ 10%；显著但两个 seed 不同号）。"""
+    pc = dict(N2_acc_ge_50=premise["N2_acc"] >= 0.50, N2_sound_ge_80=premise["N2_sound"] >= 0.80,
               N2_transplant_lt_10=premise["N2_transplant_acc"] < 0.10)
-    out = dict(premise_checks=pc, premise_ok=all(pc.values()), comparisons={}, subreadings={})
+    out = dict(premise_checks=pc, premise_ok=all(pc.values()), comparisons={}, subreadings={}, notes=[])
     if not out["premise_ok"]:
         out["reading"] = "P_fail"; out["text"] = "干净推导在此训练量下不可学/不可执行；停。"; return out
     C = out["comparisons"]
@@ -155,22 +160,28 @@ def classify(acc: dict, premise: dict) -> dict:
     C["N2s_vs_N2"] = compare(acc["N2"], acc["N2s"])        # diff = N2s − N2
     C["N3u_vs_N2"] = compare(acc["N2"], acc["N3u"])        # diff = N3u − N2
     C["N2s_vs_N3m"] = compare(acc["N3m"], acc["N2s"])      # diff = N2s − N3m
-    C["N3m_vs_N3u"] = compare(acc["N3u"], acc["N3m"])      # diff = N3m − N3u
+    C["N3m_vs_N3u"] = compare(acc["N3u"], acc["N3m"])      # diff = N3m − N3u（R2b 的"相差"，点估计）
     main = C["N3m_vs_N2"]
     if main["equivalent"]:
-        out["reading"] = "R1"; out["text"] = "给定相同内容，无字母记法执行得和简洁英文一样好。"; return out
-    if main["sig_worse"]:
-        sub = out["subreadings"]
-        sub["R2a"] = C["N2s_vs_N2"]["diff"] <= -TOST_MARGIN and C["N2s_vs_N3m"]["equivalent"]
-        sub["R2b"] = C["N2s_vs_N2"]["equivalent"] and abs(C["N3m_vs_N3u"]["diff"]) < TOST_MARGIN
-        sub["R2c"] = C["N3u_vs_N2"]["equivalent"]
-        hit = [k for k, v in sub.items() if v]
-        texts = dict(R2a="起作用的是连接词的含义，不是字母。", R2b="起作用的是字母本身。", R2c="是 mask 本身在干扰。")
-        if len(hit) == 1:
-            out["reading"] = hit[0]; out["text"] = texts[hit[0]]
-        else:
-            out["reading"] = "R2_unclear"; out["text"] = f"说不清（R2 子读法命中 {hit or '无'}）；停。"
-        return out
-    if main["sig_better"]:
-        out["reading"] = "R3"; out["text"] = "N3 显著更好；如实报告。"; return out
+        if premise["N3m_transplant_acc"] < 0.10:
+            out["reading"] = "R1"; out["text"] = "给定相同内容，无字母记法执行得和简洁英文一样好。"; return out
+        out["notes"].append(f"N3 与 N2 等效，但 N3 移植准确率 {premise['N3m_transplant_acc']:.3f} ≥ 10% → 不取 R1")
+    elif main["sig_worse"]:
+        if all(v < 0 for v in main["per_seed_diff"].values()):
+            sub = out["subreadings"]
+            sub["R2a"] = C["N2s_vs_N2"]["diff"] <= -MARGIN and C["N2s_vs_N3m"]["equivalent"]
+            sub["R2b"] = C["N2s_vs_N2"]["equivalent"] and abs(C["N3m_vs_N3u"]["diff"]) < MARGIN
+            sub["R2c"] = C["N3u_vs_N2"]["equivalent"]
+            hit = [k for k, v in sub.items() if v]
+            texts = dict(R2a="起作用的是连接词的含义，不是字母。", R2b="起作用的是字母本身。", R2c="是 mask 本身在干扰。")
+            if len(hit) == 1:
+                out["reading"] = hit[0]; out["text"] = texts[hit[0]]
+            else:
+                out["reading"] = "R2_unclear"; out["text"] = f"说不清（R2 子读法命中 {hit or '无'}）；停。"
+            return out
+        out["notes"].append(f"N3 显著更差，但两个 seed 的点差不同号 {main['per_seed_diff']} → 不取 R2")
+    elif main["sig_better"]:
+        if all(v > 0 for v in main["per_seed_diff"].values()):
+            out["reading"] = "R3"; out["text"] = "N3 显著更好；如实报告。"; return out
+        out["notes"].append(f"N3 显著更好，但两个 seed 的点差不同号 {main['per_seed_diff']} → 不取 R3")
     out["reading"] = "R4"; out["text"] = "以上都不是；说不清，停。"; return out
