@@ -1,55 +1,77 @@
-# 第二阶段 · 闸门 1 配置 —— 已准备，**未运行**。不在 OSF 注册的 stage-1 协议之内。
-# 问题：同一段求解器推导，在四种写法下，SFT 后模型能否学会生成它并据此答对？（写法 = 唯一变量）
+# 第二阶段 · 闸门 1 配置 —— 已准备，**未运行**。不在 OSF 注册的 stage-1 协议之内（用户将写登记文本挂 OSF 后再开机）。
+# 问题：同一段求解器推导，在三种写法下，SFT 后模型能否学会生成它并据此答对？（写法 = 唯一变量）
 # 渲染器与连接词映射冻结于 commit f887662（cot_compress/derivation.py；ops/phase2_templates.md）。
-# 标 "TBD-用户" 的项未定；标 "默认" 的项是 planning-led 的选择，照抄 B_warm-SFT 的设置，待用户确认。
+# 打分、内容检验、判读的定义写在 cot_compress/gate1.py 文件头；单测 tests/test_gate1.py。
 
-base_config: configs/cloud_4b.yaml          # 模型 Qwen3-4B bf16、LoRA r32 α64 attention+MLP（D5）、vLLM util 0.35（D20）
+base_config: configs/cloud_4b.yaml          # Qwen3-4B bf16、LoRA r32 α64 attention+MLP（D5）、vLLM util 0.35（D20）、force_reserve 40
 key: ord_n8_h4_d5
-notations: [N1, N2, N2s, N3]
-seeds: [1, 2]                               # 每种写法 2 个 seed（seed 定数据顺序与 LoRA 初始化）→ 共 8 个 run
+notations: [N2, N2s, N3]                    # N1 去掉（用户 2026-09-23）
+seeds: [1, 2]                               # 6 个 run：gate1_{N2,N2s,N3}_s{1,2}
 
-train:
-  data:                                     # scripts/phase2_build_sft.py 产出；train 划分 2000 题；sha256 见 data/phase2/manifest.json
-    N1:  data/phase2/gate1_sft_N1.jsonl
+train:                                      # scripts/phase2_gate1_train.py；训练部分逐行照搬 B_warm-SFT（scripts/11_sft_warm.py）
+  data:                                     # scripts/phase2_build_sft.py 产出；stage-1 train 划分 2000 题；sha256 在 data/phase2/manifest.json，runner 启动时核对
     N2:  data/phase2/gate1_sft_N2.jsonl
     N2s: data/phase2/gate1_sft_N2s.jsonl
     N3:  data/phase2/gate1_sft_N3.jsonl
-  row_format: "prompt = stage-1 IR 题面（chat 模板 + <think>\\n 预填，同 stage-1）；completion = 推导 + \\n</think>\\n\\n<answer>σ</answer>"
-  method: sft_fresh_lora                    # 与 B_warm-SFT 相同：新 adapter，completion-only loss
-  learning_rate: 1.0e-5                     # 默认（= cloud_4b.yaml train.learning_rate，B_warm-SFT 同）
-  warmup_steps: 10                          # 默认（B_warm-SFT 同）
-  per_device_train_batch_size: 1            # 默认（B_warm-SFT 同）
-  gradient_accumulation_steps: 16           # 默认：16 条 / 步
-  max_steps: 250                            # 默认：固定步数，四种写法相同 = 4000 条 = train 2000 题 × 2 遍（B_warm-SFT 是 2 epoch）
-  save: final_only
+  method: sft_fresh_lora                    # 新 adapter，completion-only loss（同 B_warm-SFT）
+  learning_rate: 1.0e-5                     # = cloud_4b.yaml train.learning_rate（B_warm-SFT 同；runner 断言相等）
+  warmup_steps: 10                          # 同 B_warm-SFT
+  per_device_train_batch_size: 1            # 同 B_warm-SFT
+  gradient_accumulation_steps: 16           # 同 B_warm-SFT：16 条 / 步
+  max_steps: 250                            # 固定步数（用户定），三种写法相同 = 4000 条 = train 2000 题 × 2 遍
+  seed: from_run                            # transformers.set_seed(seed) 在建 LoRA 之前 → LoRA 初始化与数据顺序
 
-eval:
+eval:                                       # scripts/phase2_gate1_eval.py
   set: data/ordering/ord_n8_h4_d5_p2eval_seed1.json   # 新评估集 500 题，seed 1，与 stage-1 全部划分不相交
-  sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, n: 1}   # 同 stage-1 eval
-  cap: 10240                                # 同 stage-1（同一仪器）；推导中位 134–294 token，远低于 cap
-  mask:                                     # N3 在 B 的字母屏蔽下评估；其余不屏蔽
-    N1: none
-    N2: none
-    N2s: none
-    N3: letterfree
-  metrics:                                  # 描述量；哪个进判据由用户定
-    - acc                                   # 最终答案 exact match（tasks.ordering.check）
-    - think_tokens                          # 生成推导的长度
-    - parse_rate                            # 生成的 think 段能被 derivation.parse 按该写法解析的比例
-    - sound_rate                            # 解析后 derivation.verify 通过（每条链每一环都是当时可用的约束）的比例
-    - exact_derivation_rate                 # 生成推导与该题的规范推导逐步相同的比例
-    - letter_frac                           # think 段字母占比（N3 应为 0）
-    - capped_rate
-  also_report: frozen_model_same_eval       # 冻结模型在同一评估集上的 native / direct（基线）
+  sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, seed: 0}   # 同 stage-1 eval
+  cap: 1024                                 # 用户定；金标推导在新评估集上最长 335 token（p99 276），force_reserve 40
+  mask:                                     # 列表第一个 = 主条件（内容检验与判读里的 N3 用它）
+    N2:  [none]
+    N2s: [none]
+    N3:  [letterfree, none]                 # N3 禁字母（主）与不禁字母各评估一次
+  per_run_report:
+    - acc                                   # exact match（evaluate._row，同 stage-1：hard 违规记错）
+    - exact                                 # 解析回正确求解步骤：parse 成功且与规范推导逐步相同
+    - parsed / sound                        # 副：可解析 / 可解析且 verify 通过
+    - loop                                  # 同一非空行重复 ≥ 5 次（金标推导最多重复 4 次）
+    - capped                                # 撞 cap（预算强制收尾）
+    - letter_frac
+    - direct                                # 直接作答准确率（<think></think> 预填）
+  content_tests:
+    transplant:                             # (a) 移植：think 段整段换成题 π(i) 的金标推导（同写法），只生成答案；π = seed 0 的均匀随机错位（同 stage-1）
+      primary: transplant_gold
+      secondary: transplant_own             # 用本 run 自己在题 π(i) 上生成的 think 段
+      also_report: donor_answer_copied      # 预测等于供体题答案的比例
+    tamper:                                 # (b) 篡改：预填规范推导前半（去掉 order 后 ⌊m/2⌋ 步），把其中一条推出的关系 c<d 改成 d<c，让模型续写
+      selection: 前半中按顺序第一条 force/back 推出的关系；它在最终解 σ 中成立，在前半其后不再作为链的一环出现，且在后半某步的链里出现
+      coverage_on_eval_set: 262/500         # 找不到这样的关系的题不进篡改检验（其中被改的是 force 208 条、back 54 条）
+      control: 同一前半、不改
+      report: [acc_control, acc_tamper, delta, follows_flip_among_mentioning, uses_flip, uses_orig, answer_order_flip]
+      baseline: 对照组的同名量（正确续写也可能在被推翻的分支里出现 d→c）
+      mask: primary
 
-gate_criterion: TBD-用户                    # 例如"某写法 acc ≥ X 且 sound_rate ≥ Y"——未定，不在此预设
+analysis:                                   # scripts/phase2_gate1_analyze.py → cot_compress.gate1.classify；每个分支在 tests/test_gate1.py 里都有构造样例
+  pairing: 按题配对（键 = 题 id × seed），两个 seed 合并（每个比较 1000 对）
+  equivalence: TOST ±5pp（配对差的 90% 置信区间落在 (−5pp, +5pp) 内，正态近似）
+  difference: McNemar 精确双侧 p < 0.05 且配对差 ≤ −5pp（"显著更差"）/ ≥ +5pp（"显著更好"）
+  N3_primary: N3 禁字母（native_letterfree）；N3u = 不禁字母（native_none）
+  premise_P: [N2 准确率 ≥ 50%, N2 解析正确率 ≥ 80%, N2 移植（transplant_gold）准确率 < 10%]   # 两个 seed 合并
+  if_P_fails: "干净推导在此训练量下不可学/不可执行；停"
+  readings:
+    R1: N3 与 N2 等效 → 给定相同内容，无字母记法执行得和简洁英文一样好
+    R2: N3 显著更差 → 看子读法（恰好命中一个才采用；命中 0 个或 ≥2 个 → 说不清，停）
+    R2a: N2s − N2 ≤ −5pp（点估计）且 N2s 与 N3 等效 → 起作用的是连接词的含义，不是字母
+    R2b: N2s 与 N2 等效 且 |N3 − N3u| < 5pp（点估计）→ 起作用的是字母本身
+    R2c: N3u 与 N2 等效（N3 禁字母时显著更差已由 R2 保证）→ 是 mask 本身在干扰
+    R3: N3 显著更好 → 如实报告
+    R4: 以上都不是 → 说不清，停
+  reference_only: A1 收敛准确率 91.2%（stage-1 停止集）——只作次要参照，不进判读
 
 cost_estimate_usd:                          # $1.6/h；未实测
-  per_run_hours: [0.4, 1.7]                 # SFT 250 步（短序列）约 15–25 min + 模型加载；eval 500 题：推导正常约 5 min，若模型不收尾而写到 cap 则约 80 min（B1 / E2 实测）
-  total_8_runs: [5, 22]
-  plus_frozen_baseline: [1, 2]
+  per_run_hours: [0.35, 1.1]                # SFT 250 步（序列 ≤ ~600 token）约 10–20 min + 合并 / 载入；评估：cap 1024，500 题 × (原生 1–2 次 + 直接 + 移植 2 次 + 篡改 2×292) 约 10–30 min
+  total_6_runs: [4, 11]
 
-missing_before_run:                         # 已知缺口（未写代码，按指示只准备配置）
-  - runner：scripts/11_sft_warm.py 的训练部分可直接复用，但它在内部调用 warm 变换（make_sft_rows）并把 run 命名为 Bwarm_sft_*；需要一个读取上述 jsonl、按 max_steps（而非 epochs）训练的变体
-  - eval 集覆盖：scripts/train.py --eval-only 固定用 stop 划分（make_eval_set split="stop"），需要一个读取 p2eval 文件的入口
-  - 新增 eval 指标 parse_rate / sound_rate / exact_derivation_rate 需接 cot_compress.derivation
+not_yet_verified_on_gpu:                    # 在 CPU 上用 --stub 跑通了整条打分与判读流水线；下列部分只能在 pod 上验证
+  - phase2_gate1_train.py 的实际训练（照搬 B_warm-SFT 的代码，改动三处：数据来源、max_steps、seed）
+  - phase2_gate1_eval.py 的模型载入（照搬 06_diagnose --backend vllm）与 vLLM 生成
+  - cap 1024 下 run_eval 的预算强制（同一 SpanLogitsProcessor，stage-1 用的是 cap 10240）

@@ -331,3 +331,4 @@
   - 第 0 步长度阶梯（报告集、A1 答对 458 题配对）：A1 4493 token → N1 284 → N2 = N2s = N3 134；N2→N3 token 恒 1.000（构造），code point 0.685，比特 1.184（字典）/ 0.761（无字典）。与 A1 强制预算曲线同表：推导均短于最低预算点 475 token（A1 acc 0.6%）。`ops/notes_length_ladder.md`。
   - 闸门 1 配置 `configs/phase2_gate1.yaml`（4 写法 × 2 seed、固定 250 步 SFT、新评估集、N3 在屏蔽下评估）与训练数据 `data/phase2/`（sha256 见 manifest）已准备，**未运行**；判据待用户定；runner 与 eval 集入口尚缺。
   - paper §6.2 按用户要求加描述性注记（停止规则按 L_mean 变平时 L_median 仍在降；36% 读作下界），§7.4 引用；§9 记本条。
+- 2026-09-23 **闸门 1 准备完毕、未运行（纯 CPU）**：去掉 N1 → N2/N2s/N3 × 2 seed = 6 run；SFT 固定 250 步、超参同 B_warm-SFT；评估 cap 1024（金标推导最长 335 token）；N3 禁 / 不禁字母各一次；内容检验：移植（金标供体为主、自身轨迹为副）与篡改（覆盖 262/500，含对照基线）；判读分区写进 `cot_compress/gate1.classify`，18 项单测覆盖每个分支。训练 runner dry-run 6/6 通过（sha256、超参）；评估入口与判读用 oracle / mixed 两种桩在 CPU 上端到端跑通；过程中修两处（篡改条件名、篡改目标须在最终解中成立）。GPU 侧（训练、vLLM 载入、cap 1024 强制）未验证。清单与待确认定义：`ops/phase2_gate1_ready.md`。用户将写登记文本挂 OSF 后再开机。
