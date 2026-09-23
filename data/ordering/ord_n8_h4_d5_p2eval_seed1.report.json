@@ -1,0 +1,33 @@
+{
+ "key": "ord_n8_h4_d5",
+ "seed": 1,
+ "split": "p2eval",
+ "n": 500,
+ "candidates_drawn": 558,
+ "rejected_as_stage1_duplicate": 0,
+ "distinct_isomorphism_classes": 500,
+ "overlap_with_stage1_canonical": 0,
+ "overlap_with_stage1_prompts": 0,
+ "S_dist": {
+  "1": 471,
+  "2": 29
+ },
+ "gen_stats": {
+  "tries": 163254,
+  "unique": 1809,
+  "S_ge_1": 558
+ },
+ "stats_median": {
+  "n_le_hard": 1680.0,
+  "max_antichain": 5.0,
+  "ham_paths": 22.5,
+  "surviving_disj": 5.0
+ },
+ "kahn_lb_elements_median": null,
+ "stage1_splits_checked": {
+  "stop": 500,
+  "report": 500,
+  "direct": 2000,
+  "train": 2000
+ }
+}

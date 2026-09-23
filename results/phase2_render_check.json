@@ -1,0 +1,259 @@
+{
+ "connectives": {
+  "since": {
+   "N2": {
+    "surface": " since",
+    "id": 2474,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " table",
+    "id": 1965,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " :",
+    "id": 549,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "not": {
+   "N2": {
+    "surface": " not",
+    "id": 537,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " green",
+    "id": 6176,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " !",
+    "id": 753,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "forces": {
+   "N2": {
+    "surface": " forces",
+    "id": 8437,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " river",
+    "id": 14796,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " =>",
+    "id": 589,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "holds": {
+   "N2": {
+    "surface": " holds",
+    "id": 9982,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " paper",
+    "id": 5567,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " ;",
+    "id": 2587,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "suppose": {
+   "N2": {
+    "surface": " suppose",
+    "id": 22477,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " window",
+    "id": 3241,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " ?",
+    "id": 937,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "contradiction": {
+   "N2": {
+    "surface": " contradiction",
+    "id": 49759,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " music",
+    "id": 4627,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " #",
+    "id": 671,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "so": {
+   "N2": {
+    "surface": " so",
+    "id": 773,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " garden",
+    "id": 13551,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " =",
+    "id": 284,
+    "whitelist": true,
+    "has_letter": false
+   }
+  },
+  "order": {
+   "N2": {
+    "surface": " order",
+    "id": 1973,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N2s": {
+    "surface": " yellow",
+    "id": 13753,
+    "whitelist": false,
+    "has_letter": true
+   },
+   "N3": {
+    "surface": " @",
+    "id": 569,
+    "whitelist": true,
+    "has_letter": false
+   }
+  }
+ },
+ "per_set": {
+  "stage1/stop": {
+   "roundtrip_N1": 500,
+   "verify_N1": 500,
+   "roundtrip_N2": 500,
+   "verify_N2": 500,
+   "roundtrip_N2s": 500,
+   "verify_N2s": 500,
+   "roundtrip_N3": 500,
+   "verify_N3": 500,
+   "aligned": 500,
+   "N3_letterfree_whitelist": 500,
+   "all_pass": 500,
+   "n": 500
+  },
+  "stage1/report": {
+   "roundtrip_N1": 500,
+   "verify_N1": 500,
+   "roundtrip_N2": 500,
+   "verify_N2": 500,
+   "roundtrip_N2s": 500,
+   "verify_N2s": 500,
+   "roundtrip_N3": 500,
+   "verify_N3": 500,
+   "aligned": 500,
+   "N3_letterfree_whitelist": 500,
+   "all_pass": 500,
+   "n": 500
+  },
+  "stage1/direct": {
+   "roundtrip_N1": 2000,
+   "verify_N1": 2000,
+   "roundtrip_N2": 2000,
+   "verify_N2": 2000,
+   "roundtrip_N2s": 2000,
+   "verify_N2s": 2000,
+   "roundtrip_N3": 2000,
+   "verify_N3": 2000,
+   "aligned": 2000,
+   "N3_letterfree_whitelist": 2000,
+   "all_pass": 2000,
+   "n": 2000
+  },
+  "stage1/train": {
+   "roundtrip_N1": 2000,
+   "verify_N1": 2000,
+   "roundtrip_N2": 2000,
+   "verify_N2": 2000,
+   "roundtrip_N2s": 2000,
+   "verify_N2s": 2000,
+   "roundtrip_N3": 2000,
+   "verify_N3": 2000,
+   "aligned": 2000,
+   "N3_letterfree_whitelist": 2000,
+   "all_pass": 2000,
+   "n": 2000
+  },
+  "p2eval": {
+   "roundtrip_N1": 500,
+   "verify_N1": 500,
+   "roundtrip_N2": 500,
+   "verify_N2": 500,
+   "roundtrip_N2s": 500,
+   "verify_N2s": 500,
+   "roundtrip_N3": 500,
+   "verify_N3": 500,
+   "aligned": 500,
+   "N3_letterfree_whitelist": 500,
+   "all_pass": 500,
+   "n": 500
+  }
+ },
+ "failures": [],
+ "event_types": {
+  "assume": 9484,
+  "force": 22492,
+  "both": 4393,
+  "back": 5149,
+  "order": 5500,
+  "cycle": 756,
+  "sat": 2031
+ },
+ "max_assumption_depth_hist": {
+  "1": 3714,
+  "2": 1452,
+  "3": 304,
+  "4": 30
+ },
+ "probe_fired": 0,
+ "connective_slots_per_item": {
+  "median": 18.0,
+  "min": 8,
+  "max": 60
+ },
+ "n_failures": 0
+}
