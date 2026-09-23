@@ -316,3 +316,8 @@
 - B1 全程三点：acc 0.014 / 0.002 / **0.016**；L_mean 9926 / 9486 / 9840；到顶率 95.0 / 91.4 / 95.6%；letter_frac 恒 0。**冷启动的字母屏蔽 RL 在 100 步内没有学会任务**：hard 违规（逃逸）在前 40 步内从 33% 降到 0，之后组内奖励差归零、零梯度组 100%，参数不再更新，长度回到 cap。
 - **warm 判定（预注册，由 run_matrix 在诊断后正式写入；此处独立复算）**：B1 ≤200 步最佳 acc **0.016** < A1 最佳 0.924 − 15pp = 0.774 → **cold_start_failure = True** → B_warm-RL ×2 进入待跑（受 `budget_projection` 检查；stage-1 矩阵里没有该项，需用户决定是否进入）。
 - 诊断（`06_diagnose --run runs/B_0.5_… --n 500`）正在跑；结束后 chain_b1 写 CHAIN_DONE → chain_e2_after_b1 接管跑 E2。用户指示：不干预，等 E2 落地后出选项表。
+- 2026-09-23 06:12 UTC **B1 正式收尾**：`train_rc=0 diag_rc=0`，19.8 h。**warm 判定（run_matrix 正式写入）**：`{"A1_best": 0.924, "B1_best_upto200": 0.016, "cold_start_failure": true}`。chain_b1 写 CHAIN_DONE（另存为 `CHAIN_DONE__b1_0923_0612`）→ chain_e2_after_b1 取消停机、启动 E2。
+- 2026-09-23 06:1x–08:xx UTC **E2 = B_warm-SFT(A1)**：SFT 用 A1 最后 50 步的 1435 条正确轨迹的 warm 变换（编码比 0.338 字符），2 epoch，loss 1.46 → 0.90，token 准确率 0.64 → 0.72。**eval-only（屏蔽下，stop 500，72.0 min）：acc 0.008、viol 0.010、L_mean 8771.9、L_median 10240、到顶率 83.6%、letter_frac 0.0、mask_frac 1.2e-4、ref_ppl 1.26、hit_hamming2 0.022。→ E2 无效**（需 ≥ 0.862）→ 注册读法 **"words were load-bearing or the map was lossy"**。
+  **机制（读了 eval 归档）**：模型在屏蔽下把题面的 hard / disj 约束以 warm 记法抄一遍（`, 1. 6 < 4 2. 7 < 1 …`），然后**反复循环同一段清单直到 cap**；61/500 条最常见 20 字符块占比 > 0.5；自然结束的 82 条是同样的循环碰巧停了；"答对"的 4 条是在循环里撞对的。它从未进入推理段。读法上更贴近 "the map was lossy"：删掉词之后，推理段成了模型无法自回归延续的序列，只剩可预测的"约束清单"开头能学到。
+  **对 B_warm-RL 的含义（事实）**：其起点 = 这个 0.8%、循环到 cap 的策略，与冷启动 B 的 1.4% 几乎无差；B1 的零梯度机制预计原样出现。
+- **选项表已写：`ops/options_after_stage1.md`**（剩余预算、各选项费用与意义、E1 不可计算 + §5.3 后备论文、B_warm-RL 与 E1 的关系）。等用户决定。E2 的诊断在跑，之后 chain_e2 写 CHAIN_DONE 并 `pod_stop --delay 300` → **pod 将自动停机**（stage-1 到此为止，无授权项可跑）。
