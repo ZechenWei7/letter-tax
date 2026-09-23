@@ -309,3 +309,10 @@
 - 2026-09-22 19:3x UTC **B1 step-50 eval（stop 500，78.5 min）：acc 0.002、viol 0.006、L_mean 9486.4、L_median 10240（= cap）、到顶率 91.4%、letter_frac 0.0、hit_hamming2 0.022、direct 0.0055。**
   区间 0→50：ΔL **4.64%** < 5%、Δacc **1.2pp** < 4pp → **小，连续计数 = 1**。若 50→100 也小 → **B1 在 step 100 判收敛停止**（用户已指示不干预）。
   与训练侧一致：hard 违规已归零后，rollout 又写到接近 cap（eval 到顶率 91.4%），零梯度组 → 100%，参数实际上已停止更新。残留检查未激活（需 acc ≥ 0.1045）。
+
+## 2026-09-23 03:2x UTC B1 收敛（step 100）
+- **B1 step-100 eval（stop 500，81.7 min）：acc 0.016、viol 0.006、L_mean 9840.1、L_median 10240（= cap）、到顶率 95.6%、letter_frac 0.0、hit_hamming2 0.044。**
+  区间 50→100：ΔL **3.59%** < 5%、Δacc **1.4pp** < 4pp → 小；与 0→50 构成连续两个小区间 → **收敛停止**。`designated_ckpt.json` = `{"step": 100, "reason": "converged"}`。
+- B1 全程三点：acc 0.014 / 0.002 / **0.016**；L_mean 9926 / 9486 / 9840；到顶率 95.0 / 91.4 / 95.6%；letter_frac 恒 0。**冷启动的字母屏蔽 RL 在 100 步内没有学会任务**：hard 违规（逃逸）在前 40 步内从 33% 降到 0，之后组内奖励差归零、零梯度组 100%，参数不再更新，长度回到 cap。
+- **warm 判定（预注册，由 run_matrix 在诊断后正式写入；此处独立复算）**：B1 ≤200 步最佳 acc **0.016** < A1 最佳 0.924 − 15pp = 0.774 → **cold_start_failure = True** → B_warm-RL ×2 进入待跑（受 `budget_projection` 检查；stage-1 矩阵里没有该项，需用户决定是否进入）。
+- 诊断（`06_diagnose --run runs/B_0.5_… --n 500`）正在跑；结束后 chain_b1 写 CHAIN_DONE → chain_e2_after_b1 接管跑 E2。用户指示：不干预，等 E2 落地后出选项表。
