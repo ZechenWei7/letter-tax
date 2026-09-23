@@ -321,3 +321,6 @@
   **机制（读了 eval 归档）**：模型在屏蔽下把题面的 hard / disj 约束以 warm 记法抄一遍（`, 1. 6 < 4 2. 7 < 1 …`），然后**反复循环同一段清单直到 cap**；61/500 条最常见 20 字符块占比 > 0.5；自然结束的 82 条是同样的循环碰巧停了；"答对"的 4 条是在循环里撞对的。它从未进入推理段。读法上更贴近 "the map was lossy"：删掉词之后，推理段成了模型无法自回归延续的序列，只剩可预测的"约束清单"开头能学到。
   **对 B_warm-RL 的含义（事实）**：其起点 = 这个 0.8%、循环到 cap 的策略，与冷启动 B 的 1.4% 几乎无差；B1 的零梯度机制预计原样出现。
 - **选项表已写：`ops/options_after_stage1.md`**（剩余预算、各选项费用与意义、E1 不可计算 + §5.3 后备论文、B_warm-RL 与 E1 的关系）。等用户决定。E2 的诊断在跑，之后 chain_e2 写 CHAIN_DONE 并 `pod_stop --delay 300` → **pod 将自动停机**（stage-1 到此为止，无授权项可跑）。
+- 2026-09-23 11:14 UTC **E2 分支收尾**：`Bwarm_sft_ord_n8_h4_d5_s1: sft_rc=0 evalonly_rc=0 diag_rc=0`，CHAIN_DONE（E2 branch，rc=0）→ `pod_stop --delay 300` → **pod 约 11:20 UTC 自动停机**（11:21 起 ssh 不可达；stage-1 全部完成，无授权项可跑）。E2 的诊断（n=500）耗时约 3 h——84% 撞 cap 的生成很慢。
+- **stage-1 总花费（本 pod 墙钟 09-19 22:22 → 09-23 11:20）= 85.0 h ≈ $136**；对 $300 剩余 ≈ $164（全项目口径含 stage-1 前约 $48 粗估 → 剩余 ≈ $116；以 RunPod 账单为准）。选项表 `ops/options_after_stage1.md` 已按此更新。本地 `cloud_pull/` 在停机前拉全：A1 / B1 / E2 的 eval 归档、诊断（diagnostics.json + diag_*.zst）、rollouts、warm_decision。
+- **现状：等用户在选项表上决定。pod 已停；重开需用户在 RunPod 控制台操作。**

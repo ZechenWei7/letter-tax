@@ -85,3 +85,9 @@
   2. 每项的费用投影 + 它能回答什么：B_warm-RL ×1 seed；B_warm-RL ×2 seeds；A 的第 2 个 seed；按预注册继续的其余臂（B2–4、A″、C_rand）在冷启动 B 失败时各自还剩什么意义。
   3. 按预注册规则：冷启动 B 若未达匹配准确率，E1 是否不可计算、适用哪份后备论文（§4.5 "any arm has no point within 5pp of matched y → E1 not computed → §5.3 no-matched-accuracy paper"；§4.6 readings 的 "cold B fails, B_warm-RL succeeds" 与 "both fail → search-budget result"；需核对 B_warm-RL 是否可作为 E1 中的 B 臂）。
 - 触发时机：B1 的 `designated_ckpt.json` 出现 + E2 的 `evalonly_Bwarm_…/eval.jsonl` 落地。
+
+## 2026-09-23 11:20 UTC：stage-1 完成，pod 已自动停机，等用户决定
+- 三个判定（正式）：门通过；B1 冷启动失败（0.016 < 0.774）；E2 无效（0.008，循环到 cap）。E1 不可计算 → §5.3 后备论文适用。
+- 花费 $136（本 pod 墙钟），剩余 ≈ $164（或全项目口径 ≈ $116）。
+- **选项表：`ops/options_after_stage1.md`**。用户未决定前不跑任何东西；重开 pod 需用户在控制台点。
+- 本地 watcher / 看板仍在跑（对停机的 pod 会持续 WARN，无害；pod 重开后自动恢复）。
