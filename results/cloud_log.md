@@ -324,3 +324,4 @@
 - 2026-09-23 11:14 UTC **E2 分支收尾**：`Bwarm_sft_ord_n8_h4_d5_s1: sft_rc=0 evalonly_rc=0 diag_rc=0`，CHAIN_DONE（E2 branch，rc=0）→ `pod_stop --delay 300` → **pod 约 11:20 UTC 自动停机**（11:21 起 ssh 不可达；stage-1 全部完成，无授权项可跑）。E2 的诊断（n=500）耗时约 3 h——84% 撞 cap 的生成很慢。
 - **stage-1 总花费（本 pod 墙钟 09-19 22:22 → 09-23 11:20）= 85.0 h ≈ $136**；对 $300 剩余 ≈ $164（全项目口径含 stage-1 前约 $48 粗估 → 剩余 ≈ $116；以 RunPod 账单为准）。选项表 `ops/options_after_stage1.md` 已按此更新。本地 `cloud_pull/` 在停机前拉全：A1 / B1 / E2 的 eval 归档、诊断（diagnostics.json + diag_*.zst）、rollouts、warm_decision。
 - **现状：等用户在选项表上决定。pod 已停；重开需用户在 RunPod 控制台操作。**
+- 2026-09-23 **E2 失败归因的纯 CPU 检查**（用户要求；未开机、不改任何东西）：本地重建 SFT 数据（与 pod 逐位一致），三列对照 A1 原文 / warm 训练数据 / E2 生成。warm 训练数据 4-gram 重复率 0.117（原文 0.110）、zlib 0.322、相邻清单间无推理标记 7.5%；E2 生成 0.944 / 0.024 / 100%。→ 循环模式不在训练数据里。数据有损：70.5% 的词删除，9.2% 的推理段只剩碎屑，序数 second–fifth 全删而 first 保留。本检查区分不了训练不够与有损推理段不可学。详见 `ops/notes_warm_lossiness.md`，样本 `ops/warm_samples/`。
