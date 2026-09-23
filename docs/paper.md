@@ -2,11 +2,11 @@
 
 ## A pre-registered fair measurement on a certified-deductive task
 
-2026-09-16 · @Someone · DRAFT — living document, results to be filled in
+2026-09-23 · @Someone · DRAFT — living document; stage-1 results in §6 (registered outcome: E1 not computable, §5.3 fallback); direction pending
 
 ## Abstract
 
-Several methods report 3–16× fewer reasoning tokens when chain-of-thought is written in symbolic or abstract tokens instead of natural language. For the papers cited, those figures compare against verbal chains that were never length-optimized, on benchmarks the same models largely solve with no chain at all, and without a control for whether the compact trace carries computation. We measure the quantity those comparisons need and lack: on a synthetic deductive task certified to require an intermediate trace, the difference in trace length between RL-length-optimized policies that may use letters and RL-length-optimized policies that may not, at matched externalized accuracy — the *letter tax* — together with whether the letter-free trace is load-bearing. Both policies start from the same checkpoint, share reward, optimizer, and stopping rule, and differ only in the reachable vocabulary; a same-instrument arm that leaves single letters reachable separates "letters" from "hard constraint"; a deterministic word-removal transform of the letter-permitted policy's traces gives an encoding-only measurement with no RL; a same-alphabet content-destroyed policy gives the content floor. Decision rules, readings, and kill criteria are fixed here before any run. **Results: TBD.** We do not claim anything about a general non-human code, about frontier models, or about content that cannot be scored, and we do not call a letter-free notation "non-linguistic".
+Several methods report 3–16× fewer reasoning tokens when chain-of-thought is written in symbolic or abstract tokens instead of natural language. For the papers cited, those figures compare against verbal chains that were never length-optimized, on benchmarks the same models largely solve with no chain at all, and without a control for whether the compact trace carries computation. We measure the quantity those comparisons need and lack: on a synthetic deductive task certified to require an intermediate trace, the difference in trace length between RL-length-optimized policies that may use letters and RL-length-optimized policies that may not, at matched accuracy — the *letter tax* — together with whether the letter-free trace is load-bearing. Both policies start from the same checkpoint, share reward, optimizer, and stopping rule, and differ only in the reachable vocabulary; a same-instrument arm that leaves single letters reachable separates "letters" from "hard constraint"; a deterministic word-removal transform of the letter-permitted policy's traces gives an encoding-only measurement with no RL; a same-alphabet content-destroyed policy gives the content floor. Decision rules, readings, and kill criteria are fixed here before any run. **Results: TBD.** We do not claim anything about a general non-human code, about frontier models, or about content that cannot be scored, and we do not call a letter-free notation "non-linguistic".
 
 ## 1. Introduction
 
@@ -59,7 +59,7 @@ None of this bears on whether a model can invent a general code (Q1). A positive
 
 ### 3.2 Estimand: the letter tax
 
-`tax = (L_A − L_B) / L_A` at matched externalized accuracy, where L\_A is the length of the RL-length-optimized letter-permitted trace, L\_B the length of the RL-length-optimized letter-banned trace, both measured among correct traces, and externalized accuracy = accuracy − the same policy's direct-answer (no-trace) accuracy. Reported in tokens (primary), code points, and bits under a coder fit on the union of all arms' traces (robustness). A tax that appears in tokens but reverses in code points or bits is a tokenizer effect. A negative tax (letter-free longer by ≥ 10%) is reported as such.
+`tax = (L_A − L_B) / L_A` at matched accuracy, where L\_A is the length of the RL-length-optimized letter-permitted trace and L\_B the length of the RL-length-optimized letter-banned trace, both measured among correct traces. As in §4.5, accuracy is matched on total accuracy; externalized accuracy (accuracy − the same policy's direct-answer, no-trace accuracy) is reported alongside. Reported in tokens (primary), code points, and bits under a coder fit on the union of all arms' traces (robustness). A tax that appears in tokens but reverses in code points or bits is a tokenizer effect. A negative tax (letter-free longer by ≥ 10%) is reported as such.
 
 Two pre-registered practical-significance tiers: **≥ 25%** is a detectable tax; **≥ 67%** is the tier consistent with the 3× claims in prior work. **< 10%** is no tax beyond tokenizer effects; 10–25% is reported as the bound "tax ≤ 25%". These are cutoffs, not powered tests.
 
@@ -155,17 +155,19 @@ GRPO, Dr. GRPO loss, no reward-std scaling, β = 0; 2 prompts × G = 16; LoRA r 
 
 | Outcome | Reading |
 | --- | --- |
-| tax ≥ 25% (all units, same tier), E3 passes | under a letter ban, RL produces a shorter load-bearing trace assembled from the supplied primitives; ≥ 67% additionally matches the magnitudes prior work reports |
+| tax in [25, 67) or [67, ∞) (tier claimed), E3 passes | under a letter ban, RL produces a shorter load-bearing trace assembled from the supplied primitives; [67, ∞) additionally matches the magnitudes prior work reports |
 | A″ ≈ B < A | the effect is the hard constraint, not letters |
-| tax < 10%, A's letter fraction low | length optimization alone sheds letters on this task and model |
-| tax < 10%, letter fraction high | words cost nothing at matched accuracy on this task and model |
-| tax ≤ −10% | the ban costs length |
-| 10 ≤ tax < 25% | reported as "≤ 25%" |
-| arms differ in strategy class | the ban changed the algorithm; pooled tax primary, within-class tax may be undefined; reported under D3 |
+| tax in (−10, 10), A's letter fraction low | length optimization alone sheds letters on this task and model |
+| tax in (−10, 10), A's letter fraction high | words cost nothing at matched accuracy on this task and model |
+| tax in (−∞, −10] | the ban costs length |
+| tax in [10, 25) | reported as "≤ 25%" |
+| interval spans tiers, or units disagree | interval and span reported; no tier claimed |
 | cold B fails, B\_warm-RL succeeds | usable but not findable from cold start at this budget |
 | both fail | search-budget result |
 | B > C\_rand but transplant/resample do not collapse | structured filler |
 | E1 not computable | the no-matched-accuracy paper (§5.3) |
+
+Tiers are intervals (in %): [67, ∞) / [25, 67) / [10, 25) / (−10, 10) / (−∞, −10]. A tier is claimed only if, in each of the three units, the whole bootstrap interval lies inside it and all three units give the same tier. The strategy-class row of earlier drafts ("arms differ in strategy class → the ban changed the algorithm") was withdrawn at freeze because the classifier is letter-dependent (§9, 2026-09-19 freeze r4); strategy classes are descriptive only.
 
 ## 5. Feasibility, kill criteria, analysis plan, reproducibility
 
@@ -241,23 +243,74 @@ Native-trace detail: natural termination 62.2% (311/500), of which 89.1% correct
 
 **Cost (measured, A `--dry-run` 20 steps, cap 10,240, provisional M = 8,192).** 494 s/step (generation 218 s + training 276 s), L_mean 8,106, ≈ 259k tokens/step, peak 74.4 GiB allocated. Projection at $1.6/h: 200 steps = 27.4 h/run; 11 runs ≈ 302 GPU·h ≈ $483 training + ≈ $88 eval ≈ **$571 > $300 ceiling**. vLLM memory 0.6 + sleep mode (D11) gave ≈ 4% and was not adopted. Per §5.1 decision point 2 this was a stop-and-decide: the decision (D14) was to run only A1 → B_warm-SFT(A1) → B1 → warm decision, halting on any gate failure instead of auto-retuning, then decide again. Stage-1 worst case (A1 and B1 each to 400 steps) ≈ $200.
 
-**Manipulation gate.** TBD — frozen → A reduction; gate / kill verdict.
+**Actual stage-1 spend.** 85.0 h of pod wall-clock (2026-09-19 22:22 → 2026-09-23 11:20 UTC, including the crash investigation) ≈ $136 at $1.6/h; the earlier pods used for calibration and admission are not included (≈ $48 estimated from the log; billing records govern).
+
+**Manipulation gate (A seed 1).** A1 was relaunched on 2026-09-20 after a first-step crash (§9; D20) and converged at step 350 under the registered stopping rule (intervals 250→300 and 300→350: ΔL\_mean 3.63% and 3.10%, Δacc 0.0 and 1.2 pp). The gate is anchored on the rerun's own step-0 evaluation (L\_mean 8,261.7, accuracy 0.604); the crashed run's step-0 evaluation (L\_mean 8,219, accuracy 0.624) is reported alongside, as fixed before the rerun.
+
+| Gate criterion | Value | Threshold | |
+| --- | --- | --- | --- |
+| token reduction vs step 0 (L\_mean) | 35.97% | ≥ 30% | pass |
+| accuracy loss | −30.8 pp (accuracy rose) | ≤ 5 pp | pass |
+| converged L\_median | 4,539.5 tokens | ≥ 2 × Kahn floor = 60 | pass |
+| kill (converged L\_median ≤ 1.5 × decision floor = 48.75) | 4,539.5 | — | not triggered |
+
+**Gate passed.** λ = 0.5 and G = 16 stand for every arm; none of the retune dispatch (D22) was used.
+
+| A1, stopping-eval (n = 500) | step 0 | 50 | 100 | 150 | 200 | 250 | 300 | 350 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| accuracy | 0.604 | 0.640 | 0.784 | 0.852 | 0.844 | 0.924 | 0.924 | 0.912 |
+| L\_mean | 8,262 | 7,949 | 7,243 | 6,637 | 6,162 | 5,651 | 5,453 | 5,290 |
+| L\_median | 8,701 | 7,955 | 6,973 | 6,081 | 5,446 | 5,008 | 4,828 | 4,540 |
+| force-closed | 41.2% | 35.6% | 23.8% | 17.6% | 15.0% | 9.0% | 9.0% | 9.4% |
+| letter fraction | 78.7% | 78.6% | 79.0% | 78.1% | 78.4% | 79.0% | 78.7% | 77.9% |
+
+**Frozen → A reduction**, reported as the reduction *under λ = 0.5 with cap 10,240* (§7.4): L\_mean −36.0%, L\_median −47.8%. The letter fraction of the think span stayed within 77.9–79.0% at all eight evaluation points. Of the +30.8 pp accuracy change, 84% (+26.0 pp) is attributable to the falling force-close rate and 16% (+4.8 pp) to within-group change, by an exact decomposition (`ops/notes_accuracy_decomposition.md`). Among naturally terminated traces the length distribution moved left at every quantile (p10 / p25 / p50 −37.6 / −37.5 / −35.8%), while the top decile of all traces stayed near the cap (p90 −3.6%) (`ops/notes_length_distribution.md`).
 
 ### 6.3 E1 — letter tax
 
-TBD — Figure 1, Table 1.
+**Not computable.** B seed 1 reached at most 1.6% stopping-eval accuracy (0.014 / 0.002 / 0.016 at steps 0 / 50 / 100; §6.6). The matched accuracy — the highest y that A, A″ and B all reach, minus 5 pp (§4.5) — is therefore undefined, and E1 is not computed. A″ was not run (D14). By §4.6 ("E1 not computable → the no-matched-accuracy paper"), the registered outcome is the §5.3 fallback. None of the §5.3 kill criteria fired.
 
 ### 6.4 E2 — encoding-only
 
-TBD — B\_warm-SFT per A seed.
+**Invalid.** B\_warm-SFT(A1): SFT on the warm transform of A1's 1,435 correct traces from its last 50 steps (character ratio 0.338), 2 epochs, fresh adapter; evaluated under the letter mask on the stopping-eval split (n = 500): accuracy **0.008**, against the validity bar of 0.862 (A1's 0.912 − 5 pp); L\_median 10,240 (83.6% force-closed). Registered reading: **"words were load-bearing or the map was lossy."** Implementation test 8 was run in its registered form — 100 traces, strategy-class shares within 1 pp — before this SFT (D25).
+
+*Descriptive diagnostics (not part of any decision rule; `ops/notes_warm_lossiness.md`):*
+
+- The training data does not loop; the generations do. 4-gram repeat rate: A1 source 0.110, warm training data 0.117, generations 0.944. Constraint-list paragraphs make up 3.4% of training-data characters and 88.2% of generated characters; between two adjacent lists, no reasoning marker appears in 7.5% of cases in the training data and in 100% of cases in the generations.
+- SFT did not fit the data: final training loss 0.90, token accuracy 0.72.
+- The map is lossy: 70.5% of word tokens are deleted; 9.2% of A1's reasoning paragraphs reduce to punctuation only; the ordinals *second*–*fifth* are deleted while *first* is mapped; *since*, *because* and *must* are deleted.
+
+This check does not distinguish insufficient training from a reasoning segment that cannot be learned in its lossy form.
 
 ### 6.5 E3 — content
 
-TBD — Table 2, Figure 2, cipher check.
+**Not applicable.** E3 is defined on a working B (B > C\_rand at matched length; transplant and resample collapse relative to B's own accuracy; decoder on B's traces). With B at 1.6% accuracy there is nothing to test, and C\_rand, whose context distribution is drawn from B's converged traces, was not run.
 
 ### 6.6 What B wrote
 
-TBD — descriptive: notation, operators emitted, strategy classes, decoder readings, evolution over training from the archive.
+**B seed 1** (cold start, letter mask, same reward and hyperparameters as A). The mask held: the think-span letter fraction was exactly 0 at all three evaluations, with a banned-token rate of ≈ 2 × 10⁻⁵.
+
+| B1, stopping-eval (n = 500) | step 0 | 50 | 100 |
+| --- | --- | --- | --- |
+| accuracy | 0.014 | 0.002 | 0.016 |
+| L\_mean | 9,926 | 9,486 | 9,840 |
+| L\_median | 10,240 | 10,240 | 10,240 |
+| force-closed | 95.0% | 91.4% | 95.6% |
+
+Training rollouts, per 10-step window (descriptive):
+
+| steps | 1–10 | 11–20 | 21–30 | 31–40 | 41–50 | 51–60 | 61–70 | 71–80 | 81–90 | 91–100 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hard violations (escape) | 33.4% | 11.3% | 2.2% | 0.3% | 0.3% | 0 | 0 | 0 | 0 | 0 |
+| zero-reward-spread groups | 0% | 10% | 45% | 65% | 75% | 80% | 75% | 85% | 85% | 60% |
+| exact hit rate | 0.3% | 1.6% | 0.3% | 0.9% | 0.3% | 0.9% | 0 | 0.9% | 0.3% | 2.8% |
+
+- In the first ten steps a third of rollouts escaped the mask: they wrote `</think>` almost immediately (bottom decile within 5 characters) and reasoned in English in the unmasked answer region, which the reward scores −5 as a hard violation. Escape fell to zero by step 51.
+- While escape lasted, the within-group reward spread came from the −5 penalty. As escape disappeared, zero-reward-spread groups — groups with no gradient under the group-relative advantage — rose to 75–85% of groups over steps 41–90. The median within-group reward spread was 0.00 over steps 26–100, and the share of the spread due to length among correct completions was 0 throughout.
+- Among whitelist tokens emitted during escape attempts are reserved-token strings such as `<|100000|>`, which decode to digits and punctuation only and are therefore legal under the mask.
+- B1 converged at step 100 under the stopping rule (intervals 0→50 and 50→100: ΔL\_mean 4.64% and 3.59%, Δacc 1.2 and 1.4 pp).
+
+**Warm decision (registered):** best accuracy up to step 200 = 0.016 < A1's best 0.924 − 15 pp = 0.774 → **cold\_start\_failure = True** (`results/warm_decision_ord_n8_h4_d5.json`). B\_warm-RL was not run; neither the reading "usable but not findable from cold start" nor "both fail → search-budget result" can therefore be claimed.
 
 ## 7. Discussion
 
@@ -290,18 +343,22 @@ If the tax is large and E3 passes, compressed traces in deployed models may be d
 
 ## 8. Limitations and future work
 
-- **Scale.** 1.7B and 4B parameters. A positive result motivates, but does not establish, the same at frontier scale; a negative result is weaker still (§7.2).
-- **Cold start.** Pure RL under a letter-free mask may not recover. IBM (2026) report cold-start failure for abstract tokens and use bottlenecked SFT with self-distillation as warm-up. We implement the same warm-up, with arm A's traces as teacher, and report whether it was needed. "Emergence without warm-up" is itself a result we record.
+- **Scale.** One model, Qwen3-4B with LoRA; the Qwen3-1.7B local runs were pipeline development only and are not reported. A positive result would motivate, but not establish, the same at frontier scale; a negative result is weaker still (§7.2).
+- **Cold start.** Pure RL under a letter-free mask may not recover. IBM (2026) report cold-start failure for abstract tokens and use bottlenecked SFT with self-distillation as warm-up. Our warm-up is different and simpler: B\_warm is a deterministic map applied to arm A's traces (a fixed control-word lexicon mapped to symbols, every other letter-containing word deleted) followed by ordinary SFT — no bottleneck, no self-distillation. It is therefore not a replication of IBM's warm-up, and its failure (§6.4) says nothing about theirs.
 - **Architecture held fixed.** We vary only the trace alphabet. Recurrent-depth or continuous-thought architectures (Coconut; GPT-6 Astra's reported recurrence) change the compute-per-token trade-off and are the natural next comparison: whether a discrete non-linguistic trace or a latent loop is the more efficient carrier of the same serial computation.
 - **Multi-agent convergence.** The question the title asks about *inventing* a language is, in its strong form, a question about a shared protocol between agents. A single-model trace is a private code; testing whether two independently trained arm-B models converge on compatible codes is future work.
-- **Compute.** Local experiments are limited to \~200 GRPO steps at 4–8 generations. The cloud stage is budgeted at roughly 4–6 full runs; a λ sweep with multiple seeds per arm would require institutional compute.
+- **Compute.** All reported runs used one A100 80 GB with G = 16. The registered 11-run matrix was projected at ≈ $571 against the $300 ceiling and was not run; stage 1 (A seed 1, B seed 1, B\_warm-SFT) used ≈ $136 of pod time (§6.2, D14). More seeds per arm, or a λ sweep, would require more compute.
 
 * **Task-specificity of the code.** A single-task run can at best produce a task-shaped notation. The question with deployment significance is whether codes learned under the same constraint on structurally different tasks share structure — delimiters, counters, state layout — and whether a code learned on one task survives transfer to another. Multi-task RL under the mask, with cross-task probes, is the natural next study; it would also be the first place to look for a genuine "language of thought" as opposed to a compression scheme.
-* **Decoding the code.** Prior work that produces unreadable traces (IBM 2026; Coconut) characterizes them statistically or by projection, not by translation. Because every intermediate state in the cup task is known, a supervised translator from trace segments to state can be trained and evaluated; its success or failure is a direct measure of how the trace stores information, and a fallback for the counterfactual-edit diagnostic when the notation does not parse.
+* **Decoding the code.** Prior work that produces unreadable traces (IBM 2026; Coconut) characterizes them statistically or by projection, not by translation. Because every instance's ground-truth intermediate state is known — the answer-consistent disjunct choices, the true ready set and the next event at each step — a supervised translator from trace segments to state can be trained and evaluated (the E3 decoder is one); its success or failure is a direct measure of how the trace stores information, and a fallback for the counterfactual-edit diagnostic when the notation does not parse.
 
 ## 9. Experiment log (authors' record)
 
 Design decisions and the observations that forced them, newest first. Entries are meant to be appended by whoever runs the next experiment.
+
+**2026-09-23 (B1 converged; E2 invalid; stage 1 closed).** B seed 1 converged at step 100 under the stopping rule (intervals 0→50 and 50→100: ΔL\_mean 4.64% / 3.59%, Δacc 1.2 / 1.4 pp), with stopping-eval accuracy 0.014 / 0.002 / 0.016 and 91–96% of traces force-closed. The registered warm decision was written by the matrix runner: best accuracy up to step 200 = 0.016 < 0.924 − 15 pp → cold\_start\_failure = True. E2 then ran as queued (D25): B\_warm-SFT(A1) scored 0.008 under the mask against a validity bar of 0.862 → invalid; registered reading "words were load-bearing or the map was lossy". Its generations restate the constraint list and repeat it until the cap. The chain wrote its done marker and the pod stopped itself at 11:20 UTC; stage-1 pod time was 85.0 h ≈ $136. Registered outcome: B's accuracy leaves the matched accuracy undefined, so E1 is not computable and the §5.3 fallback applies; no kill criterion fired; B\_warm-RL was not run, so neither of its readings can be claimed. A CPU-only check on the rebuilt SFT data (bit-identical to the pod's) found that the training data does not loop (4-gram repeat 0.117 vs 0.944 in generations; constraint lists 3.4% vs 88.2% of characters), that the map is lossy (70.5% of words deleted, 9.2% of reasoning paragraphs reduced to punctuation, ordinals second–fifth deleted), and that SFT ended at loss 0.90 / token accuracy 0.72; it cannot separate insufficient training from an unlearnable lossy reasoning segment. An options table (remaining budget, cost and meaning of B\_warm-RL ×1 / ×2, A seed 2, B2–4, A″, C\_rand) was prepared for the user; direction is pending. §6 was filled with these results; text fixes: matched accuracy stated as total accuracy in the abstract and §3.2 (as in §4.5), §4.6 tiers written as intervals and the withdrawn strategy-class row removed, outdated §8 items corrected (1.7B runs, local step budget, cup-task decoder, and the claim that B\_warm replicates IBM's warm-up), header updated.
+
+**2026-09-22 (A1 converged, gate passed; two chain halts; B1 run before E2).** A1 converged at step 350 and the matrix runner recorded the gate as passed (token reduction 35.97%, accuracy +30.8 pp, L\_median 4,539.5, no kill). Moving to the second run, the chain crashed: in `run_matrix.py` the workspace-writability probe's loop variable `d` shadowed the matrix defaults dictionary, so the second run's config lookup failed (D23). The bug fires only from the second run on, which no earlier test reached. The pod-stop countdown the halt triggered was cancelled, the fix was verified by a dry run over all three runs, and the chain restarted with A1 skipped. B\_warm-SFT then halted on implementation test 8: the implementation asserted exact equality of strategy-class distributions over all 1,435 source traces, stricter than the registered wording (100 traces), and one trace changed class. The cause was a single boundary case in the detector: two deleted instances of *try* lowered its branch count from 8 to 6, and the enumeration rule requires strictly more than 6; every other field was unchanged. This was stopped for a user decision rather than resolved in place. Because B1 does not depend on B\_warm-SFT and run order is not fixed by the registration, B1 was started first (D24). The user then chose to align test 8 with its registered wording — 100 traces (seed 0), class shares within 1 pp — leaving the warm map and the detectors untouched (D25). The check passed at exactly 1.00 pp, because the seed-0 sample contains the flipped trace. E2 was queued to run after B1. B1's first steps were dominated by mask escape (33% hard violations, `</think>` within 5 characters for the bottom decile); the earlier prediction that low accuracy would give zero-gradient groups was wrong in form, since the −5 escape penalty supplied the reward spread, and zero-gradient groups rose only after escape was learned away. The user instructed that B1 not be intervened on. The same day, the §2 row for Kaufmann et al. was corrected after a full reading (a monitorability framework on tasks not certified to need a trace, with the collapse to arrow notation under a character-counted penalty), and three threats were added to §7.4: length pressure proportional to accuracy, A compressing without re-notating, and token versus character pricing.
 
 **2026-09-19 (planning-led session; text aligned to the running protocol).** The project moved to a single lead session; the execution session holds the pod until the stage-1 chain ends, after which the lead takes over all operations (time recorded in `ops/state.md`). Three places where this document had drifted from the running protocol were corrected, each marked inline as a deviation with the registered wording kept next to it: §4.4 cap 5,120 → 10,240 (D8); §4.2 criterion 7, automatic detectors → manual audit (D13); §7.4 "supplied primitives" reworded from the K&K operators to the ordering IR (event indices, `<`, `|`). §6.1 and the cost half of §6.2 were filled from `results/cloud_log.md` and the admission json. Standing rule adopted for any future change to a decision criterion: check it against the registered page (https://osf.io/usycb) first — what the page fixes can only change as a logged deviation reported in the paper; what it does not fix (eval frequency, archive granularity, run order) may be adjusted but is still logged. Budget watch: stage-1 worst case (A1 and B1 each to the 400-step cap at 494 s/step, $1.6/h) ≈ $200; spend is re-projected when the first evals land and the run stops for a user decision if the projection exceeds $200.
 
